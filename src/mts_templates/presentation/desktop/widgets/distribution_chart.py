@@ -10,16 +10,11 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from mts_templates.presentation.desktop.distribution import DistributionBar
 from mts_templates.presentation.desktop.formatting import format_int, format_percent
+from mts_templates.presentation.desktop.theme import active_palette
 
-TITLE_COLOR = "#344054"
-CAPTION_COLOR = "#98a2b3"
-LABEL_COLOR = "#344054"
-VALUE_COLOR = "#475467"
-TRACK_COLOR = "#eef2f7"
 EXACT_GRADIENT = ("#1f6feb", "#6aa9ff")
 GROUPED_GRADIENT = ("#98a2b3", "#c9d0db")
 DARK_MUSTARD_GRADIENT = ("#8a6a15", "#bfa03c")
-EMPTY_TEXT_COLOR = "#98a2b3"
 
 TITLE_HEIGHT = 24.0
 CAPTION_HEIGHT = 16.0
@@ -81,7 +76,7 @@ class DistributionChart(QWidget):
         font.setPointSize(10)
         font.setBold(True)
         painter.setFont(font)
-        painter.setPen(QColor(TITLE_COLOR))
+        painter.setPen(QColor(active_palette().text))
         painter.drawText(
             rect, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), self._title
         )
@@ -93,13 +88,13 @@ class DistributionChart(QWidget):
         font.setPointSize(8)
         font.setBold(False)
         painter.setFont(font)
-        painter.setPen(QColor(CAPTION_COLOR))
+        painter.setPen(QColor(active_palette().text_muted))
         painter.drawText(
             rect, int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter), self._caption
         )
 
     def _draw_empty(self, painter: QPainter, rect: QRectF) -> None:
-        painter.setPen(QColor(EMPTY_TEXT_COLOR))
+        painter.setPen(QColor(active_palette().text_muted))
         painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), "Нет данных")
 
     def _draw_rows(self, painter: QPainter, rect: QRectF) -> None:
@@ -137,7 +132,7 @@ class DistributionChart(QWidget):
         text_height: int,
     ) -> None:
         center_y = row.center().y()
-        painter.setPen(QColor(LABEL_COLOR))
+        painter.setPen(QColor(active_palette().text))
         painter.drawText(
             QRectF(row.x(), row.y(), track_left - row.x() - LABEL_GAP, row.height()),
             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
@@ -146,7 +141,7 @@ class DistributionChart(QWidget):
 
         track = QRectF(track_left, center_y - BAR_HEIGHT / 2, track_width, BAR_HEIGHT)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(TRACK_COLOR))
+        painter.setBrush(QColor(active_palette().surface_alt))
         painter.drawRoundedRect(track, BAR_RADIUS, BAR_RADIUS)
 
         if peak > 0 and bar.count > 0:
@@ -162,7 +157,7 @@ class DistributionChart(QWidget):
             )
             painter.drawRoundedRect(fill, BAR_RADIUS, BAR_RADIUS)
 
-        painter.setPen(QColor(VALUE_COLOR))
+        painter.setPen(QColor(active_palette().text_muted))
         painter.drawText(
             QRectF(
                 track.right() + VALUE_GAP,

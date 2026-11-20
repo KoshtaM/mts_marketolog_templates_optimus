@@ -13,7 +13,9 @@ from mts_templates.application.settings import (
     BASELINE_MODES,
     BASELINE_OBSERVED,
     DATABASE_NAME,
+    DEFAULT_THEME,
     SETTINGS_NAME,
+    THEME_IDS,
     AppSettings,
     BenefitThresholds,
 )
@@ -81,6 +83,7 @@ def default_settings() -> AppSettings:
         baseline_mode=BASELINE_OBSERVED,
         delivered_only=True,
         benefit_thresholds=BenefitThresholds(),
+        theme=DEFAULT_THEME,
     )
 
 
@@ -126,6 +129,7 @@ def dump_settings(settings: AppSettings) -> str:
         f"sender_case_sensitive = {str(settings.sender_case_sensitive).lower()}",
         f"baseline_mode = {_quote(settings.baseline_mode)}",
         f"delivered_only = {str(settings.delivered_only).lower()}",
+        f"theme = {_quote(settings.theme)}",
     ]
     if settings.last_statistics_dir is not None:
         lines.append(f"last_statistics_dir = {_quote(settings.last_statistics_dir)}")
@@ -202,6 +206,10 @@ def _apply_mapping(settings: AppSettings, raw: dict[str, Any]) -> AppSettings:
             changes["baseline_mode"] = mode
     if "delivered_only" in raw:
         changes["delivered_only"] = bool(raw["delivered_only"])
+    if "theme" in raw:
+        theme = str(raw["theme"]).strip()
+        if theme in THEME_IDS:
+            changes["theme"] = theme
     thresholds = _parse_benefit_thresholds(raw.get("benefit"))
     if thresholds is not None:
         changes["benefit_thresholds"] = thresholds

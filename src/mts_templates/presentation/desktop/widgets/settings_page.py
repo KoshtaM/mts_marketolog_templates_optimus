@@ -1,21 +1,27 @@
-"""Экран «Настройки»: параметры анализа, baseline, пороги выгоды и стоимость шаблона."""
+"""Экран «Настройки»: параметры анализа, внешний вид и данные."""
 
 from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -33,6 +39,12 @@ from mts_templates.domain.analytics.normalization import (
     PUNCTUATION_SPACE,
 )
 from mts_templates.domain.value_objects import Money
+from mts_templates.presentation.desktop.theme_catalog import (
+    SYSTEM_THEME,
+    THEMES,
+    theme_by_id,
+)
+from mts_templates.presentation.desktop.widgets.theme_card import ThemeCard
 
 BASELINE_ITEMS = (
     (BASELINE_OBSERVED, "Средняя стоимость сегмента обычных SMS × сегменты срабатываний"),
@@ -53,11 +65,15 @@ BENEFIT_LEVEL_TITLES = (
     "Уровень 5 — супер выгоден",
 )
 
+NAV_TITLES = ("Общие", "Внешний вид", "Дополнительно")
+THEME_COLUMNS = 3
+
 
 class SettingsPage(QWidget):
-    """Позволяет изменить параметры, влияющие на результат анализа."""
+    """Позволяет изменить параметры анализа и тему оформления."""
 
     settings_saved = Signal()
+    theme_changed = Signal(str)
 
     def __init__(
         self,
@@ -69,6 +85,7 @@ class SettingsPage(QWidget):
         super().__init__(parent)
         self._settings_store = settings_store
         self._settings = settings
+        self._theme_cards: dict[str, ThemeCard] = {}
 
         self._baseline = QComboBox(self)
         for value, title in BASELINE_ITEMS:
@@ -113,6 +130,10 @@ class SettingsPage(QWidget):
         self._data_dir = QLabel(str(settings.data_dir), self)
         self._data_dir.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._save_button = QPushButton("Сохранить настройки", self)
+        self._reset_theme_button = QPushButton("Сбросить к системной теме", self)
+
+        self._nav = QListWidget(self)
+        self._stack = QStackedWidget(self)
 
         self._build()
         self._load(settings)
@@ -126,8 +147,48 @@ class SettingsPage(QWidget):
         return box
 
     def _build(self) -> None:
-        layout = QVBoxLayout(self)
+        self._build_nav()
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(self._nav)
+        root.addWidget(self._stack, 1)
 
+        self._stack.addWidget(self._build_general_page())
+        self._stack.addWidget(self._build_appearance_page())
+        self._stack.addWidget(self._build_advanced_page())
+        self._nav.currentRowChanged.connect(self._stack.setCurrentIndex)
+        self._nav.setCurrentRow(0)
+
+    def _build_nav(self) -> None:
+        self._nav.setObjectName("settingsNav")
+        self._nav.setFixedWidth(190)
+        self._nav.setFrameShape(QFrame.Shape.NoFrame)
+        self._nav.setSpacing(2)
+        for title in NAV_TITLES:
+            item = QListWidgetItem(title)
+            item.setSizeHint(QSize(0, 38))
+            self._nav.addItem(item)
+
+    def _build_general_page(self) -> QWidget:
+        page = QWidget(self)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        layout.addWidget(self._build_analysis_box())
+        layout.addWidget(self._build_benefit_box())
+
+        bottom = QHBoxLayout()
+        bottom.addStretch(1)
+        bottom.addWidget(self._save_button)
+        layout.addLayout(bottom)
+        layout.addStretch(1)
+
+        self._save_button.clicked.connect(self._save)
+        return page
+
+    def _build_analysis_box(self) -> QGroupBox:
         analysis_box = QGroupBox("Параметры анализа", self)
         form = QFormLayout(analysis_box)
         form.addRow("Методика baseline", self._baseline)
@@ -143,8 +204,9 @@ class SettingsPage(QWidget):
         form.addRow("", self._sender_case)
         form.addRow("Стоимость шаблона, ₽/мес", self._fee)
         form.addRow("", self._delivered_only)
-        layout.addWidget(analysis_box)
+        return analysis_box
 
+    def _build_benefit_box(self) -> QGroupBox:
         benefit_box = QGroupBox("Пороги выгоды шаблона, ₽", self)
         benefit_form = QFormLayout(benefit_box)
         for title, box in zip(BENEFIT_LEVEL_TITLES, self._thresholds, strict=True):
@@ -156,27 +218,80 @@ class SettingsPage(QWidget):
         )
         hint.setWordWrap(True)
         benefit_form.addRow("", hint)
-        layout.addWidget(benefit_box)
+        return benefit_box
 
-        paths_box = QGroupBox("Данные", self)
+    def _build_appearance_page(self) -> QWidget:
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        content = QWidget(scroll)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
+
+        title = QLabel("Внешний вид", content)
+        title.setObjectName("settingsTitle")
+        layout.addWidget(title)
+
+        hint = QLabel(
+            "Выберите тему оформления. Она применяется сразу и сохраняется автоматически.",
+            content,
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(14)
+        for index, theme in enumerate(THEMES):
+            card = ThemeCard(theme, content)
+            card.clicked.connect(self._select_theme)
+            self._theme_cards[theme.id] = card
+            grid.addWidget(card, index // THEME_COLUMNS, index % THEME_COLUMNS)
+        grid.setColumnStretch(THEME_COLUMNS, 1)
+        layout.addLayout(grid)
+
+        self._reset_theme_button.clicked.connect(lambda: self._select_theme(SYSTEM_THEME.id))
+        reset_row = QHBoxLayout()
+        reset_row.addWidget(self._reset_theme_button)
+        reset_row.addStretch(1)
+        layout.addLayout(reset_row)
+        layout.addStretch(1)
+
+        scroll.setWidget(content)
+        return scroll
+
+    def _build_advanced_page(self) -> QWidget:
+        page = QWidget(self)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        paths_box = QGroupBox("Данные", page)
         paths_layout = QFormLayout(paths_box)
         paths_layout.addRow("Каталог данных", self._data_dir)
         hint = QLabel(
             "База SQLite, логи и пользовательские настройки хранятся в каталоге данных. "
             "Сами выгрузки в приложение не копируются.",
-            self,
+            page,
         )
         hint.setWordWrap(True)
         paths_layout.addRow("", hint)
         layout.addWidget(paths_box)
 
-        bottom = QHBoxLayout()
-        bottom.addStretch(1)
-        bottom.addWidget(self._save_button)
-        layout.addLayout(bottom)
+        about_box = QGroupBox("О программе", page)
+        about_layout = QVBoxLayout(about_box)
+        about = QLabel(
+            "MTS SMS Templates Optimus — анализ SMS-шаблонов, срабатывания и "
+            "экономической выгоды для МТС-Маркетолога.",
+            page,
+        )
+        about.setWordWrap(True)
+        about_layout.addWidget(about)
+        layout.addWidget(about_box)
         layout.addStretch(1)
-
-        self._save_button.clicked.connect(self._save)
+        return page
 
     def _load(self, settings: AppSettings) -> None:
         self._settings = settings
@@ -199,6 +314,11 @@ class SettingsPage(QWidget):
             box.setValue(float(level.amount))
         self._delivered_only.setChecked(settings.delivered_only)
         self._data_dir.setText(str(settings.data_dir))
+        self._refresh_theme_cards()
+
+    def _refresh_theme_cards(self) -> None:
+        for theme_id, card in self._theme_cards.items():
+            card.set_selected(theme_id == self._settings.theme)
 
     def reload(self, settings: AppSettings | None = None) -> None:
         """Перечитать настройки из хранилища или применить переданные."""
@@ -209,6 +329,22 @@ class SettingsPage(QWidget):
                 QMessageBox.critical(self, "Ошибка", str(exc))
                 return
         self._load(settings)
+
+    def _select_theme(self, theme_id: str) -> None:
+        """Применить тему сразу и сохранить выбор без кнопки «Сохранить»."""
+        theme = theme_by_id(theme_id)
+        if theme.id == self._settings.theme:
+            return
+        updated = self._settings.with_overrides(theme=theme.id)
+        try:
+            self._settings_store.save(updated)
+        except OSError as exc:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить тему: {exc}")
+            self._refresh_theme_cards()
+            return
+        self._settings = updated
+        self._refresh_theme_cards()
+        self.theme_changed.emit(theme.id)
 
     def _save(self) -> None:
         try:

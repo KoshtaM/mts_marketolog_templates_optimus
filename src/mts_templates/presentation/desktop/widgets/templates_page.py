@@ -175,7 +175,6 @@ class TemplatesPage(QWidget):
         self._loss_total = BenefitTotal("Убыток убыточных шаблонов, ₽/мес", self)
         self._active_total = BenefitTotal("Выгода действующих шаблонов, ₽/мес", self)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
-        self._operator_title.setStyleSheet("color: #555;")
         self._operator_title.setWordWrap(True)
         self._busy = BusyBar(self)
 

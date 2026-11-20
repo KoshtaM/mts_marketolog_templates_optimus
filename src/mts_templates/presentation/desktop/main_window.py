@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
+    QApplication,
     QMainWindow,
     QProgressBar,
     QPushButton,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from mts_templates.composition import Container
+from mts_templates.presentation.desktop.theme import apply_theme as apply_app_theme
 from mts_templates.presentation.desktop.widgets.candidates_page import CandidatesPage
 from mts_templates.presentation.desktop.widgets.dashboard_page import DashboardPage
 from mts_templates.presentation.desktop.widgets.export_page import ExportPage
@@ -84,6 +86,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Данные: {container.settings.data_dir} · база: {container.database.path.name}"
         )
+        self.apply_theme(container.settings.theme)
 
     def _add_page(self, page: QWidget, title: str) -> None:
         self._tabs.addTab(page, title)
@@ -114,6 +117,20 @@ class MainWindow(QMainWindow):
         self._templates_page.analysis_completed.connect(self._on_analysis_changed)
         self._candidates_page.candidates_found.connect(self._on_analysis_changed)
         self._settings_page.settings_saved.connect(self._on_settings_saved)
+        self._settings_page.theme_changed.connect(self._on_theme_changed)
+
+    def apply_theme(self, theme_id: str) -> None:
+        """Применить тему ко всему приложению и обновить кастомные страницы."""
+        app = QApplication.instance()
+        if not isinstance(app, QApplication):
+            return
+        theme = apply_app_theme(app, theme_id)
+        self._dashboard_page.apply_theme(theme)
+        self.update()
+
+    def _on_theme_changed(self, theme_id: str) -> None:
+        self.apply_theme(theme_id)
+        self.statusBar().showMessage("Тема оформления обновлена.", 4000)
 
     def _on_data_changed(self) -> None:
         self._dashboard_page.reload()

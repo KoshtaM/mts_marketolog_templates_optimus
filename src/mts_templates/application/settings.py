@@ -18,6 +18,28 @@ BASELINE_CATALOG = "catalog"
 BASELINE_MODES = (BASELINE_OBSERVED, BASELINE_CATALOG)
 BENEFIT_LEVELS = 5
 
+# Идентификаторы тем оформления. Сами стили живут в presentation: здесь только
+# значения, которые сохраняются в TOML и проверяются при загрузке.
+THEME_SYSTEM = "system"
+THEME_NEO_BRUTALISM = "neo_brutalism"
+THEME_BIOPHILIC_GLASSHOUSE = "biophilic_glasshouse"
+THEME_CASSETTE_FUTURISM = "cassette_futurism"
+THEME_SWISS_MINIMALISM = "swiss_minimalism"
+THEME_DARK_ART_DECO = "dark_art_deco"
+THEME_ETHEREAL_MESH = "ethereal_mesh"
+THEME_LOFI_COZY = "lofi_cozy"
+DEFAULT_THEME = THEME_SYSTEM
+THEME_IDS = (
+    THEME_SYSTEM,
+    THEME_NEO_BRUTALISM,
+    THEME_BIOPHILIC_GLASSHOUSE,
+    THEME_CASSETTE_FUTURISM,
+    THEME_SWISS_MINIMALISM,
+    THEME_DARK_ART_DECO,
+    THEME_ETHEREAL_MESH,
+    THEME_LOFI_COZY,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class BenefitThresholds:
@@ -67,6 +89,7 @@ class AppSettings:
     baseline_mode: str
     delivered_only: bool
     benefit_thresholds: BenefitThresholds = BenefitThresholds()
+    theme: str = DEFAULT_THEME
     last_statistics_dir: Path | None = None
     last_templates_dir: Path | None = None
     last_export_dir: Path | None = None

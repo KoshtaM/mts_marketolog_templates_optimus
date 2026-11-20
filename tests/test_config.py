@@ -5,7 +5,11 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from mts_templates.application.settings import BenefitThresholds
+from mts_templates.application.settings import (
+    THEME_DARK_ART_DECO,
+    THEME_SYSTEM,
+    BenefitThresholds,
+)
 from mts_templates.domain.value_objects import Money
 from mts_templates.infrastructure.config import (
     BASELINE_CATALOG,
@@ -85,3 +89,35 @@ def test_broken_file_falls_back_to_defaults(tmp_path: Path) -> None:
     settings = load_settings(data_dir=tmp_path)
 
     assert settings.template_fee.amount == Decimal("2000.00")
+
+
+def test_default_theme_is_system(tmp_path: Path) -> None:
+    settings = load_settings(data_dir=tmp_path)
+
+    assert settings.theme == THEME_SYSTEM
+
+
+def test_theme_roundtrip(tmp_path: Path) -> None:
+    settings = default_settings().with_overrides(
+        data_dir=tmp_path,
+        theme=THEME_DARK_ART_DECO,
+    )
+    save_settings(settings)
+
+    loaded = load_settings(data_dir=tmp_path)
+
+    assert loaded.theme == THEME_DARK_ART_DECO
+
+
+def test_unknown_theme_falls_back_to_default(tmp_path: Path) -> None:
+    (tmp_path / "settings.toml").write_text('theme = "unknown"\n', encoding="utf-8")
+
+    settings = load_settings(data_dir=tmp_path)
+
+    assert settings.theme == THEME_SYSTEM
+
+
+def test_dump_contains_theme(tmp_path: Path) -> None:
+    text = dump_settings(default_settings().with_overrides(data_dir=tmp_path))
+
+    assert 'theme = "system"' in text

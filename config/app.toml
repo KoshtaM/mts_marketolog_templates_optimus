@@ -33,6 +33,11 @@ baseline_mode = "observed"
 # Для кандидатов учитывать только доставленные сообщения
 delivered_only = true
 
+# Тема оформления: system, neo_brutalism, biophilic_glasshouse,
+# cassette_futurism, swiss_minimalism, dark_art_deco, ethereal_mesh, lofi_cozy.
+# Выбирается в «Настройки → Внешний вид» и сохраняется в settings.toml.
+theme = "system"
+
 # Пороги уровней выгоды шаблона, ₽: от «еле выгоден» до «супер выгоден».
 # Убыток выделяется слабо-красным цветом и порогов не имеет.
 [benefit]

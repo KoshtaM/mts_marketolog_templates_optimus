@@ -11,8 +11,8 @@ from mts_templates.application.use_cases.dashboard import (
     profitable_candidates_count,
 )
 from mts_templates.domain.value_objects import Money
+from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.dashboard_page import (
-    BENEFIT_SAVING_COLOR,
     BENEFIT_SAVING_FONT_SIZE,
     _benefit_hint,
     _benefit_hint_html,
@@ -108,7 +108,7 @@ def test_candidates_hint_shows_profitable_count() -> None:
 
     assert hint.startswith("по последнему анализу<br>выгодных: ")
     assert "120" in hint
-    assert f"color: {BENEFIT_SAVING_COLOR}" in hint
+    assert f"color: {active_palette().positive}" in hint
     assert f"font-size: {BENEFIT_SAVING_FONT_SIZE}px" in hint
 
 
@@ -165,7 +165,7 @@ def test_benefit_hint_html_highlights_savings() -> None:
 
     assert html.count("<br>") == 1
     for amount in ("+2 100.00 ₽", "+1 500.00 ₽", "+600.00 ₽"):
-        assert f"{BENEFIT_SAVING_COLOR}; font-size: {BENEFIT_SAVING_FONT_SIZE}px" in html
+        assert f"{active_palette().positive}; font-size: {BENEFIT_SAVING_FONT_SIZE}px" in html
         assert amount in html
     assert "внедрение кандидатов" in html
     assert "удаление убыточных шаблонов" in html

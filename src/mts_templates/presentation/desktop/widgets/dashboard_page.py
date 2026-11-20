@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
+from string import Template
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -40,6 +41,8 @@ from mts_templates.presentation.desktop.formatting import (
     format_period,
 )
 from mts_templates.presentation.desktop.operator_colors import OTHER_COLOR, operator_color
+from mts_templates.presentation.desktop.theme import active_palette
+from mts_templates.presentation.desktop.theme_catalog import Theme, ThemePalette
 from mts_templates.presentation.desktop.widgets.distribution_chart import (
     DARK_MUSTARD_GRADIENT,
     DistributionChart,
@@ -47,139 +50,156 @@ from mts_templates.presentation.desktop.widgets.distribution_chart import (
 from mts_templates.presentation.desktop.widgets.pie_chart import PieChart, PieSlice
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
-ORDINARY_COLOR = "#8b1a3a"
-TEMPLATED_COLOR = "#1b7f3a"
 CHART_OPERATOR_LIMIT = 5
 
-PAGE_STYLE = """
+_DASHBOARD_STYLE = Template("""
 #dashboardPage {
-    background: #f4f6fa;
+    background: $window;
 }
 #dashboardContent {
-    background: #f4f6fa;
+    background: $window;
 }
 #dashboardViewport {
-    background: #f4f6fa;
+    background: $window;
 }
 #metricCard, #sectionCard {
-    background: #ffffff;
-    border: 1px solid #e3e8f0;
+    background: $surface;
+    border: 1px solid $border;
     border-radius: 12px;
 }
 #metricTitle {
-    color: #7b8794;
+    color: $text_muted;
     font-size: 12px;
 }
 #metricValue {
-    color: #1f2a37;
+    color: $text;
     font-size: 21px;
     font-weight: 600;
 }
 QLabel#metricValue[tone="positive"] {
-    color: #1b7f3a;
+    color: $positive;
 }
 QLabel#metricValue[tone="negative"] {
-    color: #b42318;
+    color: $negative;
 }
 #metricHint {
-    color: #98a2b3;
+    color: $text_muted;
     font-size: 11px;
 }
 #metricValueCaption {
-    color: #98a2b3;
+    color: $text_muted;
     font-size: 11px;
 }
 #sectionTitle {
-    color: #1f2a37;
+    color: $text;
     font-size: 15px;
     font-weight: 600;
 }
 #sectionHint {
-    color: #98a2b3;
+    color: $text_muted;
     font-size: 11px;
 }
 #mainHeader {
-    background: #dce9f8;
-    color: #475467;
+    background: $header;
+    color: $header_text;
     font-size: 18px;
     padding: 2px 6px;
     border-radius: 4px;
 }
 #mainRowLabel {
-    color: #344054;
+    color: $text;
     font-size: 20px;
 }
 #mainRowLabelTotal {
-    color: #1f2a37;
+    color: $text;
     font-size: 20px;
     font-weight: 600;
 }
 #mainCell {
-    color: #1f2a37;
+    color: $text;
     font-size: 20px;
 }
 #mainCellShareOrdinary {
-    color: #8b1a3a;
+    color: $negative;
     font-size: 20px;
     font-weight: 600;
 }
 #mainCellShareTemplated {
-    color: #1b7f3a;
+    color: $positive;
     font-size: 20px;
     font-weight: 600;
 }
 #operatorTitle {
-    color: #344054;
+    color: $text;
     font-size: 15px;
     font-weight: 600;
 }
 #operatorHeader {
-    background: #dce9f8;
-    color: #475467;
+    background: $header;
+    color: $header_text;
     font-size: 14px;
     padding: 2px 6px;
     border-radius: 4px;
 }
 #operatorCell {
-    color: #1f2a37;
+    color: $text;
     font-size: 17px;
 }
 #subtitle {
-    color: #667085;
+    color: $text_muted;
     font-size: 12px;
 }
 #toolbarLabel {
-    color: #667085;
+    color: $text_muted;
 }
 #warningsView {
     background: transparent;
     border: none;
-    color: #475467;
+    color: $text_muted;
 }
 QComboBox {
-    background: #ffffff;
-    border: 1px solid #d7dee8;
+    background: $surface;
+    border: 1px solid $border;
     border-radius: 8px;
     padding: 5px 10px;
 }
 QComboBox:hover {
-    border-color: #b9c4d4;
+    border-color: $accent;
 }
 #primaryButton {
-    background: #1f6feb;
-    color: #ffffff;
+    background: $accent;
+    color: $surface;
     border: none;
     border-radius: 8px;
     padding: 7px 18px;
     font-weight: 600;
 }
 #primaryButton:hover {
-    background: #1a5fd0;
+    background: $accent_hover;
 }
 #primaryButton:pressed {
-    background: #1650b0;
+    background: $accent_hover;
 }
-"""
+""")
+
+
+def dashboard_style(palette: ThemePalette) -> str:
+    """Собрать QSS дашборда из палитры активной темы."""
+    return _DASHBOARD_STYLE.substitute(
+        window=palette.window,
+        surface=palette.surface,
+        surface_alt=palette.surface_alt,
+        border=palette.border,
+        text=palette.text,
+        text_muted=palette.text_muted,
+        header=palette.header,
+        header_text=palette.header_text,
+        accent=palette.accent,
+        accent_hover=palette.accent_hover,
+        positive=palette.positive,
+        negative=palette.negative,
+    )
+
 
 MAIN_COLUMNS = ("", "Сообщений", "Сегментов", "Счёт", "Средняя стоимость сегмента", "Процент")
 MAIN_ROWS = (
@@ -196,7 +216,6 @@ OPERATOR_COLUMNS = (
     "Доля (%)",
 )
 BENEFIT_BASE_HINT = "после вычета стоимости шаблонов"
-BENEFIT_SAVING_COLOR = "#1b7f3a"
 BENEFIT_SAVING_FONT_SIZE = 15
 # Карточки «Процент доставленных» и «Выгода шаблонов» на 30 % шире остальных.
 CARD_WIDTH_FACTOR = 130
@@ -288,7 +307,7 @@ class DashboardPage(QWidget):
         super().__init__(parent)
         self.setObjectName("dashboardPage")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet(PAGE_STYLE)
+        self.setStyleSheet(dashboard_style(active_palette()))
 
         self._dashboard = dashboard
         self._list_batches = list_batches
@@ -313,6 +332,11 @@ class DashboardPage(QWidget):
 
         self._build()
         self.reload()
+
+    def apply_theme(self, theme: Theme) -> None:
+        """Пересобрать локальные стили дашборда под выбранную тему."""
+        self.setStyleSheet(dashboard_style(theme.palette))
+        self.update()
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -699,17 +723,24 @@ class DashboardPage(QWidget):
 
         self._set_cell("average_segments", format_average_segments(statistics.average_segments))
 
+        palette = active_palette()
         self._segment_chart.set_slices(
             (
-                PieSlice("Обычные", float(statistics.ordinary_segments), ORDINARY_COLOR),
-                PieSlice("Шаблонированные", float(statistics.templated_segments), TEMPLATED_COLOR),
+                PieSlice("Обычные", float(statistics.ordinary_segments), palette.negative),
+                PieSlice(
+                    "Шаблонированные",
+                    float(statistics.templated_segments),
+                    palette.positive,
+                ),
             )
         )
         self._cost_chart.set_slices(
             (
-                PieSlice("Обычные", float(statistics.ordinary_cost.amount), ORDINARY_COLOR),
+                PieSlice("Обычные", float(statistics.ordinary_cost.amount), palette.negative),
                 PieSlice(
-                    "Шаблонированные", float(statistics.templated_cost.amount), TEMPLATED_COLOR
+                    "Шаблонированные",
+                    float(statistics.templated_cost.amount),
+                    palette.positive,
                 ),
             )
         )
@@ -887,7 +918,7 @@ def _saving_span(value: Money) -> str:
 def _accent_span(text: str) -> str:
     """Выделить число в подписи: крупный зелёный полужирный шрифт."""
     return (
-        f'<span style="color: {BENEFIT_SAVING_COLOR}; '
+        f'<span style="color: {active_palette().positive}; '
         f'font-size: {BENEFIT_SAVING_FONT_SIZE}px; font-weight: 600;">'
         f"{text}</span>"
     )

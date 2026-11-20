@@ -9,12 +9,7 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-TITLE_COLOR = "#344054"
-LEGEND_COLOR = "#475467"
-EMPTY_RING_COLOR = "#d0d5dd"
-EMPTY_FILL_COLOR = "#f2f4f7"
-EMPTY_TEXT_COLOR = "#98a2b3"
-SEPARATOR_COLOR = "#ffffff"
+from mts_templates.presentation.desktop.theme import active_palette
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +66,7 @@ class PieChart(QWidget):
         font.setPointSize(10)
         font.setBold(True)
         painter.setFont(font)
-        painter.setPen(QColor(TITLE_COLOR))
+        painter.setPen(QColor(active_palette().text))
         painter.drawText(
             rect,
             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
@@ -79,17 +74,18 @@ class PieChart(QWidget):
         )
 
     def _draw_pie(self, painter: QPainter, rect: QRectF) -> None:
+        palette = active_palette()
         total = sum(item.value for item in self._slices)
         if total <= 0:
-            painter.setPen(QPen(QColor(EMPTY_RING_COLOR), 1))
-            painter.setBrush(QColor(EMPTY_FILL_COLOR))
+            painter.setPen(QPen(QColor(palette.border), 1))
+            painter.setBrush(QColor(palette.surface_alt))
             painter.drawEllipse(rect)
-            painter.setPen(QColor(EMPTY_TEXT_COLOR))
+            painter.setPen(QColor(palette.text_muted))
             painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), "Нет данных")
             return
 
         start_angle = 90 * 16
-        painter.setPen(QPen(QColor(SEPARATOR_COLOR), 1))
+        painter.setPen(QPen(QColor(palette.surface), 1))
         for item in self._slices:
             span = round(-item.value / total * 360 * 16)
             painter.setBrush(QColor(item.color))
@@ -120,7 +116,7 @@ class PieChart(QWidget):
             share = item.value / total if total else 0.0
             text = f"{item.label} — {share * 100:.1f}%"
             available = content.width() - 15
-            painter.setPen(QColor(LEGEND_COLOR))
+            painter.setPen(QColor(active_palette().text_muted))
             painter.drawText(
                 QRectF(content.x() + 14, y, available, row_height),
                 int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
