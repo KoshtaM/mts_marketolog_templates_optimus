@@ -1,0 +1,25 @@
+# Окружение
+.venv/
+__pycache__/
+*.py[cod]
+
+# Данные и артефакты анализа
+data/
+*.xlsx
+*.xls
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+.env
+
+# Кэши инструментов
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE
+.idea/

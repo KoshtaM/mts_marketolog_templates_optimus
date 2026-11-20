@@ -1,0 +1,178 @@
+# Каталог тарифов МТС-Маркетолога (снимок прайса на 01.11.2026).
+# Ставки не хардкодятся в коде: исторические периоды описываются отдельными
+# записями с effective_from / effective_to.
+
+# --- Пакеты -----------------------------------------------------------------
+
+[[tariff]]
+id = "package-ordinary-all"
+kind = "package"
+name = "Обычные SMS на всех операторов РФ"
+message_class = "ordinary"
+effective_from = 2026-11-01
+pricing_mode = "uniform"
+package_size = 57600
+operators = [
+    "MTS", "Megafon", "Beeline", "Tele2", "Other_RF",
+    "Rostelecom", "Sbertelecom", "Smarts_motiv",
+]
+overage = { MTS = "7.54", Megafon = "31.90", Beeline = "10.35", Tele2 = "7.10", Other_RF = "7.70" }
+
+[[tariff.tiers]]
+from = 1
+to = 150
+price = "7.00"
+
+[[tariff.tiers]]
+from = 151
+to = 1000
+price = "9.90"
+
+[[tariff.tiers]]
+from = 1001
+to = 10000
+price = "9.80"
+
+[[tariff.tiers]]
+from = 10001
+to = 50000
+price = "9.70"
+
+[[tariff.tiers]]
+from = 50001
+to = 100000
+price = "9.60"
+
+[[tariff.tiers]]
+from = 100001
+to = 400000
+price = "9.50"
+
+[[tariff.tiers]]
+from = 400001
+to = 20000000
+price = "9.50"
+
+# --- Подписки ---------------------------------------------------------------
+
+[[tariff]]
+id = "subscription-ordinary-2026-10"
+kind = "subscription"
+name = "Обычные SMS на всех операторов РФ (ставки октября 2026)"
+message_class = "ordinary"
+effective_from = 2026-10-01
+effective_to = 2026-10-31
+
+[[tariff.blocks]]
+from = 1
+to = 5
+price = "33.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 6
+to = 20
+price = "42.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 21
+price = "8.00"
+mode = "per_message"
+
+[[tariff]]
+id = "subscription-ordinary-2026-11"
+kind = "subscription"
+name = "Обычные SMS на всех операторов РФ"
+message_class = "ordinary"
+effective_from = 2026-11-01
+
+[[tariff.blocks]]
+from = 1
+to = 5
+price = "33.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 6
+to = 20
+price = "52.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 21
+price = "8.50"
+mode = "per_message"
+
+[[tariff]]
+id = "subscription-templated-rf"
+kind = "subscription"
+name = "Шаблонированные SMS на операторов РФ"
+message_class = "templated"
+effective_from = 2026-11-01
+operators = ["MTS", "Megafon", "Beeline", "Tele2"]
+
+[[tariff.blocks]]
+from = 1
+to = 5
+price = "11.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 6
+to = 20
+price = "35.00"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 21
+to = 21
+price = "15.00"
+mode = "per_message"
+
+[[tariff.blocks]]
+from = 22
+price = "0.00"
+mode = "per_message"
+
+[[tariff]]
+id = "subscription-templated-mts"
+kind = "subscription"
+name = "Шаблонированные SMS на МТС"
+message_class = "templated"
+effective_from = 2026-11-01
+operators = ["MTS"]
+
+[[tariff.blocks]]
+from = 1
+to = 5
+price = "7.32"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 6
+to = 20
+price = "28.06"
+mode = "block_start"
+
+[[tariff.blocks]]
+from = 21
+to = 21
+price = "13.42"
+mode = "per_message"
+
+[[tariff.blocks]]
+from = 22
+price = "0.00"
+mode = "per_message"
+
+# --- Оплата по факту --------------------------------------------------------
+
+[[tariff]]
+id = "pay-per-message-2026-11"
+kind = "pay_per_message"
+name = "Обычные SMS по факту"
+message_class = "ordinary"
+effective_from = 2026-11-01
+default_rate = "7.70"
+rates = { MTS = "7.54", Megafon = "31.90", Beeline = "10.35", Tele2 = "7.10", Other_RF = "7.70", International = "35.00" }
