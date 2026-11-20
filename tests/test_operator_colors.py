@@ -9,10 +9,10 @@ from mts_templates.presentation.desktop.operator_colors import (
     operator_color,
 )
 
-MTS_RED = "#d62828"
+MTS_RED = "#e30611"
 TELE2_BLACK = "#1d1d1f"
-MEGAFON_GREEN = "#2e8b3e"
-BEELINE_YELLOW = "#f5c400"
+MEGAFON_GREEN = "#00b956"
+BEELINE_YELLOW = "#ffcc00"
 
 
 def test_requested_operator_colors() -> None:

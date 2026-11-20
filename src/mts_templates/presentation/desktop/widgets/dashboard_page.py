@@ -52,6 +52,10 @@ from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, Backgr
 
 CHART_OPERATOR_LIMIT = 5
 
+# Шаблонированные SMS в диаграммах долей — «морская волна»: чистый зелёный
+# зарезервирован за корпоративным цветом МегаФона в диаграммах операторов.
+TEMPLATED_CHART_COLOR = "#0d9488"
+
 _DASHBOARD_STYLE = Template("""
 #dashboardPage {
     background: $window;
@@ -730,7 +734,7 @@ class DashboardPage(QWidget):
                 PieSlice(
                     "Шаблонированные",
                     float(statistics.templated_segments),
-                    palette.positive,
+                    TEMPLATED_CHART_COLOR,
                 ),
             )
         )
@@ -740,7 +744,7 @@ class DashboardPage(QWidget):
                 PieSlice(
                     "Шаблонированные",
                     float(statistics.templated_cost.amount),
-                    palette.positive,
+                    TEMPLATED_CHART_COLOR,
                 ),
             )
         )

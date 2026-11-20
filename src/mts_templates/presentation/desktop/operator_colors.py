@@ -6,11 +6,13 @@ from mts_templates.domain.value_objects import Operator
 
 OTHER_COLOR = "#98a2b3"
 
+# Крупные операторы — корпоративные цвета брендов, чтобы сектора диаграмм
+# читались как «МТС», «МегаФон» и «Билайн» без обращения к легенде.
 OPERATOR_COLORS: dict[str, str] = {
-    Operator.MTS.value: "#d62828",
+    Operator.MTS.value: "#e30611",
     Operator.T2.value: "#1d1d1f",
-    Operator.MEGAFON.value: "#2e8b3e",
-    Operator.BEELINE.value: "#f5c400",
+    Operator.MEGAFON.value: "#00b956",
+    Operator.BEELINE.value: "#ffcc00",
     Operator.OTHER_RF.value: "#1f6feb",
     Operator.ROSTELECOM.value: "#7c3aed",
     Operator.SBERTELECOM.value: "#0e9aa7",
