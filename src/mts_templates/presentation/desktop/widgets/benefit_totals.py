@@ -5,12 +5,20 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
+from mts_templates.presentation.desktop.contrast import readable_text_color
+from mts_templates.presentation.desktop.theme import active_palette
+
 VALUE_FONT_SIZE = 20
 
 PROFIT_COLOR = "#1b7f3a"
 LOSS_TEXT_COLOR = "#b42318"
 MODERATE_COLOR = "#4c9a58"
 NEUTRAL_COLOR = "#667085"
+
+
+def neutral_color() -> str:
+    """Цвет прочерка, читаемый на фоне активной темы."""
+    return readable_text_color(active_palette().window)
 
 
 class BenefitTotal(QFrame):
@@ -32,7 +40,7 @@ class BenefitTotal(QFrame):
         layout.addWidget(self._value)
         layout.addStretch(1)
 
-        self.set_value("—", NEUTRAL_COLOR)
+        self.reset()
 
     def set_value(self, text: str, color: str) -> None:
         """Показать значение; цвет — имя цвета из `benefit_totals`."""
@@ -42,7 +50,7 @@ class BenefitTotal(QFrame):
         )
 
     def reset(self) -> None:
-        self.set_value("—", NEUTRAL_COLOR)
+        self.set_value("—", neutral_color())
 
     def caption(self) -> str:
         return self._caption.text()

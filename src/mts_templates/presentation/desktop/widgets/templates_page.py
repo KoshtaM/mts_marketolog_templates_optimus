@@ -36,9 +36,10 @@ from mts_templates.application.use_cases.dashboard import (
 )
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.benefit_style import (
-    LOSS_COLOR,
-    OPERATOR_LISTED_COLOR,
+    RowPalette,
     benefit_color,
+    row_palette,
+    semantic_text,
 )
 from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
@@ -51,17 +52,20 @@ from mts_templates.presentation.desktop.formatting import (
 from mts_templates.presentation.desktop.models.table_model import Column, RowsTableModel
 from mts_templates.presentation.desktop.models.table_view import build_table, fit_columns
 from mts_templates.presentation.desktop.table_filters import operator_rows_for_template
-from mts_templates.presentation.desktop.widgets.benefit_totals import (
-    LOSS_TEXT_COLOR,
-    MODERATE_COLOR,
-    PROFIT_COLOR,
-    BenefitTotal,
-)
+from mts_templates.presentation.desktop.theme import active_palette
+from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_bar import BusyBar
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 OPERATOR_TITLE = "Срабатывание по операторам получателя"
 SUMMARY_MIN_WIDTH = 240
+
+
+def _theme_row_palette() -> RowPalette:
+    """Фоны подсветки строк под активную тему."""
+    palette = active_palette()
+    return row_palette(palette.surface, palette.positive, palette.negative)
+
 
 COLUMNS = (
     Column(
@@ -156,6 +160,7 @@ class TemplatesPage(QWidget):
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
         self._operator_triggers: tuple[OperatorTriggerView, ...] = ()
+        self._row_palette = _theme_row_palette()
 
         self._batch_combo = QComboBox(self)
         self._analyze_button = QPushButton("Выполнить анализ", self)
@@ -163,6 +168,7 @@ class TemplatesPage(QWidget):
         self._filter = QLineEdit(self)
         self._summary = QLabel("Анализ ещё не выполнялся.", self)
         self._warnings = QPlainTextEdit(self)
+        self._warnings.setObjectName("warningsView")
         self._warnings.setReadOnly(True)
         self._warnings.setMaximumHeight(90)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
@@ -195,8 +201,6 @@ class TemplatesPage(QWidget):
         self._filter.setPlaceholderText("Фильтр по названию, отправителю или тексту шаблона")
         layout.addWidget(self._filter)
 
-        layout.addWidget(self._build_totals())
-
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self._table)
         splitter.addWidget(self._build_operator_section())
@@ -214,18 +218,8 @@ class TemplatesPage(QWidget):
         self._table.clicked.connect(self._cell_clicked)
         self._show_operator_rows(None)
 
-    def _build_totals(self) -> QWidget:
-        """Информационная строка с суммами выгоды и убытка шаблонов."""
-        container = QWidget(self)
-        row = QHBoxLayout(container)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(12)
-        for total in (self._profit_total, self._loss_total, self._active_total):
-            row.addWidget(total, stretch=1)
-        return container
-
     def _build_operator_section(self) -> QWidget:
-        """Таблица операторов выбранного шаблона; справа — текстовый отчёт."""
+        """Таблица операторов выбранного шаблона; справа — сводка и итоги."""
         container = QWidget(self)
         row = QHBoxLayout(container)
         row.setContentsMargins(0, 0, 0, 0)
@@ -243,8 +237,22 @@ class TemplatesPage(QWidget):
         self._summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._summary.setMinimumWidth(SUMMARY_MIN_WIDTH)
 
+        right = QWidget(container)
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(10)
+        right_layout.addWidget(self._summary)
+
+        totals = QHBoxLayout()
+        totals.setContentsMargins(0, 0, 0, 0)
+        totals.setSpacing(12)
+        for total in (self._profit_total, self._loss_total, self._active_total):
+            totals.addWidget(total, stretch=1)
+        right_layout.addLayout(totals)
+        right_layout.addStretch(1)
+
         row.addWidget(left, stretch=0)
-        row.addWidget(self._summary, stretch=1)
+        row.addWidget(right, stretch=1)
         return container
 
     def _fit_operator_width(self) -> None:
@@ -295,6 +303,17 @@ class TemplatesPage(QWidget):
             return
         self._model.refresh()
 
+    def refresh_theme(self) -> None:
+        """Пересчитать цвета строк и итогов под активную тему."""
+        self._row_palette = _theme_row_palette()
+        self._model.refresh()
+        self._operator_model.refresh()
+        rows = self._model.rows()
+        if rows:
+            self._fill_totals(rows)
+        else:
+            self._reset_totals()
+
     def _batch_changed(self, _index: int) -> None:
         self._model.set_rows(())
         self._operator_triggers = ()
@@ -344,14 +363,17 @@ class TemplatesPage(QWidget):
 
     def _fill_totals(self, metrics: tuple[TemplateMetricsView, ...]) -> None:
         """Суммы по выгодным, убыточным и действующим шаблонам за месяц."""
+        palette = active_palette()
+        profit_color = semantic_text(palette.positive, palette.window)
+        loss_color = semantic_text(palette.negative, palette.window)
         self._profit_total.set_value(
             format_money(positive_benefit(item.monthly_net_benefit for item in metrics)),
-            PROFIT_COLOR,
+            profit_color,
         )
         loss = negative_benefit(item.monthly_net_benefit for item in metrics)
         self._loss_total.set_value(
             format_money(loss) if loss.amount < 0 else format_money(Money.zero()),
-            LOSS_TEXT_COLOR,
+            loss_color,
         )
         self._active_total.set_value(
             format_money(
@@ -360,7 +382,7 @@ class TemplatesPage(QWidget):
                     Money.zero(),
                 )
             ),
-            MODERATE_COLOR,
+            profit_color,
         )
 
     def _reset_totals(self) -> None:
@@ -421,12 +443,13 @@ class TemplatesPage(QWidget):
             self._show_operator_rows(None)
 
     def _row_color(self, item: TemplateMetricsView) -> QColor | None:
-        color = benefit_color(item.monthly_net_benefit, self._thresholds)
+        color = benefit_color(item.monthly_net_benefit, self._thresholds, self._row_palette)
         return QColor(color) if color is not None else None
 
     def _operator_row_color(self, item: OperatorTriggerView) -> QColor:
         """Умеренно-зелёный для оператора из списка шаблона, красный — вне списка."""
-        return QColor(OPERATOR_LISTED_COLOR if item.listed else LOSS_COLOR)
+        palette = self._row_palette
+        return QColor(palette.listed_color if item.listed else palette.loss_color)
 
     def _set_busy(self, busy: bool, text: str = "") -> None:
         self._analyze_button.setEnabled(not busy)

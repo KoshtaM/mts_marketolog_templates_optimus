@@ -159,6 +159,8 @@ QLabel#metricValue[tone="negative"] {
 #warningsView {
     background: transparent;
     border: none;
+    border-left: 3px solid $warning;
+    padding-left: 8px;
     color: $text_muted;
 }
 QComboBox {
@@ -202,6 +204,7 @@ def dashboard_style(palette: ThemePalette) -> str:
         accent_hover=palette.accent_hover,
         positive=palette.positive,
         negative=palette.negative,
+        warning=palette.warning,
     )
 
 

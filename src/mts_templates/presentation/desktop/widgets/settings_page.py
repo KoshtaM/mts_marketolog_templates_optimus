@@ -66,7 +66,7 @@ BENEFIT_LEVEL_TITLES = (
 )
 
 NAV_TITLES = ("Общие", "Внешний вид", "Дополнительно")
-THEME_COLUMNS = 3
+THEME_COLUMNS = 4
 
 
 class SettingsPage(QWidget):

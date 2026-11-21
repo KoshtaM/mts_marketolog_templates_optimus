@@ -8,6 +8,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from mts_templates.domain.value_objects import Money
+from mts_templates.presentation.desktop.contrast import (
+    MIN_CONTRAST,
+    contrast_ratio,
+    readable_text_color,
+)
 from mts_templates.presentation.desktop.models.table_model import Column, RowsTableModel
 
 
@@ -66,3 +71,25 @@ def test_row_color_applies_to_background() -> None:
     model.set_rows([ROW])
 
     assert model.data(model.index(0, 0), Qt.ItemDataRole.BackgroundRole) == QColor("#c8e6c9")
+
+
+def test_row_text_contrasts_with_row_background() -> None:
+    fill = "#121916"
+    model = RowsTableModel(COLUMNS, row_color=lambda item: QColor(fill))
+    model.set_rows([ROW])
+
+    foreground = model.data(model.index(0, 0), Qt.ItemDataRole.ForegroundRole)
+
+    assert foreground == QColor(readable_text_color(fill))
+    assert contrast_ratio(foreground.name(), fill) >= MIN_CONTRAST
+
+
+def test_bool_colors_stay_readable_on_row_background() -> None:
+    fill = "#e6c8c8"
+    model = RowsTableModel(COLUMNS, row_color=lambda item: QColor(fill))
+    model.set_rows([ROW, Row("Убыток", Money.from_rub("-1"), False)])
+
+    for row in (0, 1):
+        foreground = model.data(model.index(row, 2), Qt.ItemDataRole.ForegroundRole)
+        assert isinstance(foreground, QColor)
+        assert contrast_ratio(foreground.name(), fill) >= MIN_CONTRAST

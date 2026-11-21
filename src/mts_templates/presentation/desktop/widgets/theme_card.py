@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QEnterEvent,
     QFont,
     QKeyEvent,
+    QLinearGradient,
     QMouseEvent,
     QPainter,
     QPainterPath,
@@ -26,6 +27,14 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from mts_templates.application.settings import (
+    THEME_EDITORIAL_MODERN,
+    THEME_MEMPHIS_POSTMODERN,
+    THEME_RISOGRAPH_PUNK,
+    THEME_SOVIET_SPACE,
+    THEME_WABI_SABI,
+    THEME_Y2K_CHROME,
+)
 from mts_templates.presentation.desktop.theme_catalog import Theme
 
 CARD_WIDTH = 224
@@ -109,7 +118,7 @@ class ThemeCard(QWidget):
         card = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
         if theme.hard_shadow:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#111111"))
+            painter.setBrush(QColor(palette.shadow))
             painter.drawRoundedRect(card.translated(4.0, 4.0), radius, radius)
 
         painter.setPen(Qt.PenStyle.NoPen)
@@ -310,6 +319,94 @@ class ThemeCard(QWidget):
             painter.fillRect(
                 QRectF(rect.x(), rect.y(), rect.width(), rect.height() * 0.45), emerald
             )
+        elif theme.id == THEME_RISOGRAPH_PUNK:
+            self._grain(painter, rect)
+            dot = QColor(palette.accent)
+            dot.setAlpha(55)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(dot)
+            y = rect.y() + 4.0
+            while y < rect.bottom():
+                x = rect.x() + 4.0
+                while x < rect.right():
+                    painter.drawEllipse(QPointF(x, y), 1.1, 1.1)
+                    x += 7.0
+                y += 7.0
+            offset = QColor(palette.accent_secondary)
+            offset.setAlpha(26)
+            painter.setBrush(offset)
+            painter.drawRoundedRect(QRectF(rect.x() + 8.0, rect.y() + 8.0, 52.0, 30.0), 3, 3)
+        elif theme.id == THEME_WABI_SABI:
+            fiber = QColor(palette.accent_secondary)
+            fiber.setAlpha(28)
+            painter.setPen(QPen(fiber, 1.0))
+            step = rect.height() / 15.0
+            for index in range(15):
+                y = rect.y() + 4.0 + index * step
+                inset = 6.0 if index % 3 else 14.0
+                painter.drawLine(QPointF(rect.x() + inset, y), QPointF(rect.right() - 6.0, y))
+            wash = QColor(palette.text_muted)
+            wash.setAlpha(16)
+            painter.fillRect(QRectF(rect.x(), rect.y(), rect.width() * 0.26, rect.height()), wash)
+        elif theme.id == THEME_Y2K_CHROME:
+            chrome = QLinearGradient(
+                QPointF(rect.x(), rect.top()), QPointF(rect.x(), rect.bottom())
+            )
+            chrome.setColorAt(0.0, QColor("#ffffff"))
+            chrome.setColorAt(0.45, QColor("#c9d0dc"))
+            chrome.setColorAt(0.55, QColor("#8a93a3"))
+            chrome.setColorAt(1.0, QColor("#e6e9ef"))
+            painter.fillRect(QRectF(rect.x(), rect.y(), rect.width(), rect.height() * 0.32), chrome)
+            self._orb(painter, rect, 0.82, 0.68, palette.accent_secondary, 85)
+        elif theme.id == THEME_EDITORIAL_MODERN:
+            rule = QColor(palette.border)
+            rule.setAlpha(120)
+            painter.setPen(QPen(rule, 1.0))
+            for share in (0.34, 0.67):
+                x = rect.x() + rect.width() * share
+                painter.drawLine(QPointF(x, rect.y() + 18.0), QPointF(x, rect.bottom() - 5.0))
+            painter.fillRect(
+                QRectF(rect.x(), rect.bottom() - 4.0, rect.width(), 3.0),
+                QColor(palette.accent),
+            )
+        elif theme.id == THEME_SOVIET_SPACE:
+            scheme = QColor(palette.border)
+            scheme.setAlpha(130)
+            painter.setPen(QPen(scheme, 1.0))
+            for share in (0.25, 0.5, 0.75):
+                x = rect.x() + rect.width() * share
+                painter.drawLine(QPointF(x, rect.y() + 14.0), QPointF(x, rect.bottom() - 4.0))
+            for share in (0.33, 0.66):
+                y = rect.y() + rect.height() * share
+                painter.drawLine(QPointF(rect.x() + 4.0, y), QPointF(rect.right() - 4.0, y))
+            glow = QRadialGradient(QPointF(rect.right() - 26.0, rect.bottom() - 22.0), 38.0)
+            amber = QColor(palette.accent)
+            amber.setAlpha(80)
+            glow.setColorAt(0.0, amber)
+            clear = QColor(palette.accent)
+            clear.setAlpha(0)
+            glow.setColorAt(1.0, clear)
+            painter.fillRect(rect, glow)
+        elif theme.id == THEME_MEMPHIS_POSTMODERN:
+            dots = QColor(palette.accent_secondary)
+            dots.setAlpha(110)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(dots)
+            for cx, cy in ((0.12, 0.18), (0.2, 0.3), (0.09, 0.44), (0.86, 0.16)):
+                painter.drawEllipse(
+                    QPointF(rect.x() + rect.width() * cx, rect.y() + rect.height() * cy), 2.4, 2.4
+                )
+            zig = QColor(palette.accent)
+            zig.setAlpha(140)
+            painter.setPen(QPen(zig, 2.0))
+            path = QPainterPath()
+            start_x = rect.right() - 62.0
+            start_y = rect.bottom() - 16.0
+            path.moveTo(start_x, start_y)
+            for step in range(5):
+                path.lineTo(start_x + step * 9.0 + 4.5, start_y - 5.0)
+                path.lineTo(start_x + step * 9.0 + 9.0, start_y)
+            painter.drawPath(path)
 
     def _draw_theme_marks(self, painter: QPainter, rect: QRectF, radius: int) -> None:
         """Характерные детали поверх миниатюры."""
@@ -384,6 +481,138 @@ class ThemeCard(QWidget):
                 8,
                 8,
             )
+        elif theme.id == THEME_RISOGRAPH_PUNK:
+            shift = 2.0
+            box = QRectF(rect.right() - 58.0, rect.bottom() - 30.0, 22.0, 16.0)
+            pink = QPen(QColor(palette.accent), 1.5)
+            blue = QPen(QColor(palette.accent_secondary), 1.5)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(pink)
+            painter.drawRect(box)
+            painter.setPen(blue)
+            painter.drawRect(box.translated(shift, -shift))
+            font = QFont("Consolas")
+            font.setPointSize(7)
+            painter.setFont(font)
+            painter.setPen(QColor(palette.accent_secondary))
+            painter.drawText(
+                QRectF(rect.x() + 32.0, rect.bottom() - 16.0, 80.0, 12.0),
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                "RISO 02",
+            )
+        elif theme.id == THEME_WABI_SABI:
+            ink = QColor(palette.accent)
+            pen = QPen(ink, 1.6)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawArc(
+                QRectF(rect.right() - 52.0, rect.bottom() - 46.0, 34.0, 34.0),
+                40 * 16,
+                280 * 16,
+            )
+            line = QColor(palette.text_muted)
+            line.setAlpha(120)
+            painter.setPen(QPen(line, 1.0))
+            painter.drawLine(
+                QPointF(rect.x() + 34.0, rect.bottom() - 12.0),
+                QPointF(rect.right() - 62.0, rect.bottom() - 12.0),
+            )
+        elif theme.id == THEME_Y2K_CHROME:
+            center = QPointF(rect.right() - 30.0, rect.bottom() - 24.0)
+            chrome = QLinearGradient(
+                QPointF(center.x() - 12.0, center.y() - 12.0),
+                QPointF(center.x() + 12.0, center.y() + 12.0),
+            )
+            chrome.setColorAt(0.0, QColor("#ffffff"))
+            chrome.setColorAt(0.5, QColor("#8a93a3"))
+            chrome.setColorAt(1.0, QColor("#e6e9ef"))
+            painter.setPen(QPen(QColor(palette.border), 1.0))
+            painter.setBrush(chrome)
+            painter.drawEllipse(center, 12.0, 12.0)
+            shine = QColor("#ffffff")
+            shine.setAlpha(170)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(shine)
+            painter.drawEllipse(QPointF(center.x() - 4.0, center.y() - 5.0), 4.0, 2.6)
+            painter.setPen(QPen(QColor(palette.accent_secondary), 1.4))
+            painter.drawArc(
+                QRectF(center.x() - 18.0, center.y() - 18.0, 36.0, 36.0),
+                200 * 16,
+                120 * 16,
+            )
+        elif theme.id == THEME_EDITORIAL_MODERN:
+            painter.fillRect(QRectF(rect.x(), rect.y(), rect.width(), 1.2), QColor(palette.text))
+            font = QFont("Georgia")
+            font.setPointSize(7)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.setPen(QColor(palette.header_text))
+            painter.drawText(
+                QRectF(rect.x() + 30.0, rect.y() + 1.0, 120.0, 11.0),
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                "THE DAILY",
+            )
+            painter.fillRect(
+                QRectF(rect.x() + 30.0, rect.y() + 12.0, 64.0, 2.0), QColor(palette.accent)
+            )
+            painter.setPen(QPen(QColor(palette.border), 1.0))
+            painter.drawLine(
+                QPointF(rect.x() + 30.0, rect.bottom() - 24.0),
+                QPointF(rect.x() + 30.0, rect.bottom() - 8.0),
+            )
+        elif theme.id == THEME_SOVIET_SPACE:
+            for index, color in enumerate((palette.accent, palette.positive, palette.negative)):
+                lamp = QColor(color)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(lamp)
+                center = QPointF(rect.right() - 54.0 + index * 12.0, rect.bottom() - 24.0)
+                painter.drawEllipse(center, 3.4, 3.4)
+                halo = QColor(color)
+                halo.setAlpha(70)
+                painter.setBrush(halo)
+                painter.drawEllipse(center, 6.0, 6.0)
+            rivet = QColor(palette.accent_secondary)
+            rivet.setAlpha(150)
+            painter.setBrush(rivet)
+            for cx, cy in ((0.06, 0.1), (0.94, 0.1), (0.06, 0.9), (0.94, 0.9)):
+                painter.drawEllipse(
+                    QPointF(rect.x() + rect.width() * cx, rect.y() + rect.height() * cy), 1.6, 1.6
+                )
+            font = QFont("Bahnschrift")
+            font.setPointSize(7)
+            painter.setFont(font)
+            painter.setPen(QColor(palette.text_muted))
+            painter.drawText(
+                QRectF(rect.x() + 32.0, rect.bottom() - 16.0, 90.0, 12.0),
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                "VOSTOK-1",
+            )
+        elif theme.id == THEME_MEMPHIS_POSTMODERN:
+            squiggle = QPainterPath()
+            start = QPointF(rect.x() + 34.0, rect.bottom() - 18.0)
+            squiggle.moveTo(start)
+            squiggle.cubicTo(
+                start.x() + 8.0,
+                start.y() - 12.0,
+                start.x() + 16.0,
+                start.y() + 4.0,
+                start.x() + 26.0,
+                start.y() - 8.0,
+            )
+            pen = QPen(QColor(palette.border), 2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(squiggle)
+            triangle = QPainterPath()
+            triangle.moveTo(rect.right() - 44.0, rect.bottom() - 12.0)
+            triangle.lineTo(rect.right() - 32.0, rect.bottom() - 30.0)
+            triangle.lineTo(rect.right() - 20.0, rect.bottom() - 12.0)
+            triangle.closeSubpath()
+            painter.setBrush(QColor(palette.accent_secondary))
+            painter.setPen(QPen(QColor(palette.border), 1.6))
+            painter.drawPath(triangle)
 
     def _orb(
         self,

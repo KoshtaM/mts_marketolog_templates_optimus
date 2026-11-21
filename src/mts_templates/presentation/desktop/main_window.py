@@ -126,6 +126,8 @@ class MainWindow(QMainWindow):
             return
         theme = apply_app_theme(app, theme_id)
         self._dashboard_page.apply_theme(theme)
+        self._templates_page.refresh_theme()
+        self._candidates_page.refresh_theme()
         self.update()
 
     def _on_theme_changed(self, theme_id: str) -> None:

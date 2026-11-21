@@ -24,7 +24,12 @@ from mts_templates.application.dto import CandidateView, ImportBatch
 from mts_templates.application.settings import AppSettings, BenefitThresholds
 from mts_templates.application.use_cases.dashboard import ListBatches, positive_benefit
 from mts_templates.application.use_cases.find_candidates import FindCandidates
-from mts_templates.presentation.desktop.benefit_style import benefit_color
+from mts_templates.presentation.desktop.benefit_style import (
+    RowPalette,
+    benefit_color,
+    row_palette,
+    semantic_text,
+)
 from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
     format_int,
@@ -38,10 +43,10 @@ from mts_templates.presentation.desktop.models.table_view import (
     build_table,
     fit_columns,
 )
+from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import (
-    NEUTRAL_COLOR,
-    PROFIT_COLOR,
     BenefitTotal,
+    neutral_color,
 )
 from mts_templates.presentation.desktop.widgets.busy_bar import BusyBar
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
@@ -88,6 +93,12 @@ WARNING_TEXT = (
 )
 
 
+def _theme_row_palette() -> RowPalette:
+    """Фоны подсветки строк под активную тему."""
+    palette = active_palette()
+    return row_palette(palette.surface, palette.positive, palette.negative)
+
+
 class CandidatesPage(QWidget):
     """Ищет группы похожих обычных сообщений и показывает прогноз выгоды."""
 
@@ -109,6 +120,7 @@ class CandidatesPage(QWidget):
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
         self._candidates: tuple[CandidateView, ...] = ()
+        self._row_palette = _theme_row_palette()
 
         self._batch_combo = QComboBox(self)
         self._search_button = QPushButton("Найти кандидатов", self)
@@ -202,8 +214,17 @@ class CandidatesPage(QWidget):
             return
         self._model.refresh()
 
+    def refresh_theme(self) -> None:
+        """Пересчитать цвета строк и итога под активную тему."""
+        self._row_palette = _theme_row_palette()
+        self._model.refresh()
+        if self._candidates:
+            self._update_profit_total(self._candidates)
+        else:
+            self._profit_total.reset()
+
     def _row_color(self, item: CandidateView) -> QColor | None:
-        color = benefit_color(item.net_monthly, self._thresholds)
+        color = benefit_color(item.net_monthly, self._thresholds, self._row_palette)
         return QColor(color) if color is not None else None
 
     def _search(self, *, force: bool) -> None:
@@ -238,13 +259,20 @@ class CandidatesPage(QWidget):
                 "Кандидатов не найдено. Проверьте порог кластеризации и минимальный объём "
                 f"группы в настройках. {WARNING_TEXT}"
             )
-        profitable = positive_benefit(item.net_monthly for item in candidates)
-        self._profit_total.set_value(
-            format_money(profitable),
-            PROFIT_COLOR if profitable.amount > 0 else NEUTRAL_COLOR,
-        )
+        self._update_profit_total(candidates)
         self._details.setPlainText("")
         self.candidates_found.emit()
+
+    def _update_profit_total(self, candidates: tuple[CandidateView, ...]) -> None:
+        """Сумма выгоды выгодных кандидатов цветом активной темы."""
+        profitable = positive_benefit(item.net_monthly for item in candidates)
+        palette = active_palette()
+        color = (
+            semantic_text(palette.positive, palette.window)
+            if profitable.amount > 0
+            else neutral_color()
+        )
+        self._profit_total.set_value(format_money(profitable), color)
 
     def _cell_clicked(self, index: QModelIndex) -> None:
         """Щелчок по тексту кандидата показывает его целиком с копированием."""
