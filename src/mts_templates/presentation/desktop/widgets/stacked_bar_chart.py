@@ -1,0 +1,254 @@
+"""Составная столбчатая диаграмма по дням на `QPainter`, без внешних зависимостей."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPaintEvent, QPen
+from PySide6.QtWidgets import QSizePolicy, QWidget
+
+from mts_templates.presentation.desktop.daily_chart import StackedBar, nice_scale
+from mts_templates.presentation.desktop.formatting import format_int
+from mts_templates.presentation.desktop.theme import active_palette
+
+TITLE_HEIGHT = 24.0
+TITLE_FONT_SIZE = 10
+AUX_FONT_SIZE = 8
+LEGEND_ROW_HEIGHT = 18.0
+LEGEND_SWATCH = 9.0
+LEGEND_ITEM_GAP = 14.0
+LEGEND_TEXT_GAP = 5.0
+X_LABEL_HEIGHT = 18.0
+X_LABEL_GAP = 8.0
+Y_LABEL_GAP = 8.0
+Y_LABEL_HEIGHT = 16.0
+PLOT_TOP_GAP = 8.0
+BAR_GAP_RATIO = 0.35
+MIN_BAR_WIDTH = 3.0
+MAX_BAR_WIDTH = 46.0
+MIN_PLOT_HEIGHT = 60.0
+EMPTY_TEXT = "Нет данных"
+
+
+class StackedBarChart(QWidget):
+    """Столбцы по дням, составленные из сегментов операторов.
+
+    `set_data` принимает столбцы и легенду `(оператор, цвет)`. Цвета частей
+    задаются вызывающим кодом, чтобы совпадать с круговыми диаграммами.
+    """
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._title = title
+        self._caption = ""
+        self._bars: tuple[StackedBar, ...] = ()
+        self._legend: tuple[tuple[str, str], ...] = ()
+        self.setMinimumSize(320, 240)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_data(
+        self,
+        bars: Sequence[StackedBar],
+        *,
+        legend: Sequence[tuple[str, str]] = (),
+        caption: str = "",
+    ) -> None:
+        self._bars = tuple(bars)
+        self._legend = tuple(legend)
+        self._caption = caption
+        self.update()
+
+    def paintEvent(self, _event: QPaintEvent) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        area = QRectF(self.rect().adjusted(8, 6, -8, -6))
+        self._draw_title(painter, QRectF(area.x(), area.y(), area.width(), TITLE_HEIGHT))
+
+        plot_top = area.y() + TITLE_HEIGHT
+        plot_top += self._draw_legend(painter, area, plot_top) + PLOT_TOP_GAP
+        plot_bottom = area.bottom() - X_LABEL_HEIGHT
+        plot = QRectF(area.x(), plot_top, area.width(), plot_bottom - plot_top)
+        if not self._bars or plot.height() < MIN_PLOT_HEIGHT:
+            self._draw_empty(painter, plot)
+            return
+        self._draw_plot(painter, plot)
+
+    def _draw_title(self, painter: QPainter, rect: QRectF) -> None:
+        palette = active_palette()
+        title_font = QFont(painter.font())
+        title_font.setPointSize(TITLE_FONT_SIZE)
+        title_font.setBold(True)
+        title_metrics = QFontMetrics(title_font)
+
+        caption_font = QFont(title_font)
+        caption_font.setPointSize(AUX_FONT_SIZE)
+        caption_font.setBold(False)
+        caption_metrics = QFontMetrics(caption_font)
+
+        caption_width = 0.0
+        if self._caption:
+            caption_width = caption_metrics.horizontalAdvance(self._caption) + 12.0
+
+        title_width = max(0.0, rect.width() - caption_width)
+        title = title_metrics.elidedText(self._title, Qt.TextElideMode.ElideRight, int(title_width))
+        painter.setFont(title_font)
+        painter.setPen(QColor(palette.text))
+        painter.drawText(
+            QRectF(rect.x(), rect.y(), title_width, rect.height()),
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            title,
+        )
+        if not self._caption:
+            return
+
+        painter.setFont(caption_font)
+        painter.setPen(QColor(palette.text_muted))
+        painter.drawText(
+            rect,
+            int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+            self._caption,
+        )
+
+    def _draw_legend(self, painter: QPainter, area: QRectF, top: float) -> float:
+        """Легенда операторов в одну или несколько строк; вернуть её высоту."""
+        if not self._legend:
+            return 0.0
+
+        font = QFont(painter.font())
+        font.setPointSize(AUX_FONT_SIZE)
+        font.setBold(False)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        palette = active_palette()
+
+        rows = _pack_legend(self._legend, metrics, area.width())
+        for row_index, row in enumerate(rows):
+            y = top + row_index * LEGEND_ROW_HEIGHT
+            x = area.x()
+            for label, color in row:
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(color))
+                painter.drawRect(QRectF(x, y + 4, LEGEND_SWATCH, LEGEND_SWATCH))
+                x += LEGEND_SWATCH + LEGEND_TEXT_GAP
+                painter.setPen(QColor(palette.text_muted))
+                painter.drawText(
+                    QRectF(x, y, metrics.horizontalAdvance(label), LEGEND_ROW_HEIGHT),
+                    int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                    label,
+                )
+                x += metrics.horizontalAdvance(label) + LEGEND_ITEM_GAP
+        return len(rows) * LEGEND_ROW_HEIGHT
+
+    def _draw_plot(self, painter: QPainter, plot: QRectF) -> None:
+        peak = max(round(bar.total) for bar in self._bars)
+        if peak <= 0:
+            self._draw_empty(painter, plot)
+            return
+
+        font = QFont(painter.font())
+        font.setPointSize(AUX_FONT_SIZE)
+        font.setBold(False)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+
+        step, top = nice_scale(peak)
+        labels = tuple(format_int(value) for value in range(0, top + 1, step))
+        label_width = float(max((metrics.horizontalAdvance(text) for text in labels), default=0))
+        label_width += Y_LABEL_GAP
+        chart = QRectF(plot.x() + label_width, plot.y(), plot.width() - label_width, plot.height())
+        if chart.width() <= 0:
+            self._draw_empty(painter, plot)
+            return
+
+        self._draw_grid(painter, chart, labels, step, top, label_width)
+        self._draw_bars(painter, chart, top)
+        self._draw_day_labels(painter, chart, metrics)
+
+    def _draw_grid(
+        self,
+        painter: QPainter,
+        chart: QRectF,
+        labels: Sequence[str],
+        step: int,
+        top: int,
+        label_width: float,
+    ) -> None:
+        """Горизонтальная сетка и подписи оси Y слева от графика."""
+        palette = active_palette()
+        line_pen = QPen(QColor(palette.border), 1)
+        text_color = QColor(palette.text_muted)
+        label_rect = QRectF(
+            chart.left() - label_width,
+            0.0,
+            label_width - Y_LABEL_GAP,
+            Y_LABEL_HEIGHT,
+        )
+        for index, text in enumerate(labels):
+            value = index * step
+            y = chart.bottom() - (value / top) * chart.height() if top else chart.bottom()
+            painter.setPen(line_pen)
+            painter.drawLine(QPointF(chart.left(), y), QPointF(chart.right(), y))
+            painter.setPen(text_color)
+            painter.drawText(
+                QRectF(label_rect.x(), y - Y_LABEL_HEIGHT / 2, label_rect.width(), Y_LABEL_HEIGHT),
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                text,
+            )
+
+    def _draw_bars(self, painter: QPainter, chart: QRectF, top: int) -> None:
+        palette = active_palette()
+        slot = chart.width() / len(self._bars)
+        bar_width = min(max(slot * (1 - BAR_GAP_RATIO), MIN_BAR_WIDTH), MAX_BAR_WIDTH)
+        separator = QPen(QColor(palette.surface), 0.8)
+        for index, bar in enumerate(self._bars):
+            x = chart.left() + index * slot + (slot - bar_width) / 2
+            cumulative = 0.0
+            for segment in bar.segments:
+                height = (segment.value / top) * chart.height() if top else 0.0
+                if height <= 0:
+                    continue
+                rect = QRectF(x, chart.bottom() - cumulative - height, bar_width, height)
+                painter.setPen(separator)
+                painter.setBrush(QColor(segment.color))
+                painter.drawRect(rect)
+                cumulative += height
+
+    def _draw_day_labels(self, painter: QPainter, chart: QRectF, metrics: QFontMetrics) -> None:
+        """Подписи дней под осью X; при тесноте — через несколько дней."""
+        slot = chart.width() / len(self._bars)
+        required = metrics.horizontalAdvance("00.00") + X_LABEL_GAP
+        step = max(1, math.ceil(required / slot))
+        painter.setPen(QColor(active_palette().text_muted))
+        for index in range(0, len(self._bars), step):
+            x = chart.left() + index * slot
+            painter.drawText(
+                QRectF(x, chart.bottom() + 2, slot, X_LABEL_HEIGHT - 2),
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+                self._bars[index].label,
+            )
+
+    def _draw_empty(self, painter: QPainter, rect: QRectF) -> None:
+        painter.setPen(QColor(active_palette().text_muted))
+        painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), EMPTY_TEXT)
+
+
+def _pack_legend(
+    legend: Sequence[tuple[str, str]],
+    metrics: QFontMetrics,
+    width: float,
+) -> list[list[tuple[str, str]]]:
+    """Разложить элементы легенды по строкам в пределах ширины."""
+    rows: list[list[tuple[str, str]]] = [[]]
+    used = 0.0
+    for entry in legend:
+        text_width = metrics.horizontalAdvance(entry[0])
+        entry_width = LEGEND_SWATCH + LEGEND_TEXT_GAP + text_width + LEGEND_ITEM_GAP
+        if rows[-1] and used + entry_width > width:
+            rows.append([])
+            used = 0.0
+        rows[-1].append(entry)
+        used += entry_width
+    return rows
