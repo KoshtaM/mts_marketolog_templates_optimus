@@ -56,7 +56,7 @@ class GetDashboardSummary:
                 active_templates=active_templates,
                 inactive_templates=template_count - active_templates,
                 candidates=0,
-                total_net_benefit=None,
+                total_monthly_net_benefit=None,
                 warnings=("Статистика ещё не импортирована.",),
             )
 
@@ -87,6 +87,14 @@ class GetDashboardSummary:
             if latest and factor is not None
             else None
         )
+        total_monthly = (
+            sum(
+                (monthly_net_benefit(item, factor) for item in latest.metrics),
+                Money.zero(),
+            )
+            if latest and factor is not None
+            else None
+        )
 
         return DashboardSummary(
             batches=batches,
@@ -96,7 +104,7 @@ class GetDashboardSummary:
             active_templates=active_templates,
             inactive_templates=template_count - active_templates,
             candidates=len(latest.candidates) if latest else 0,
-            total_net_benefit=latest.total_net_benefit if latest else None,
+            total_monthly_net_benefit=total_monthly,
             profitable_candidates=profitable_candidates,
             profitable_candidates_benefit=profitable,
             loss_templates_benefit=losses,

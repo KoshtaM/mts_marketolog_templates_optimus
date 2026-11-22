@@ -434,7 +434,7 @@ class DashboardSummary:
     active_templates: int
     inactive_templates: int
     candidates: int
-    total_net_benefit: Money | None
+    total_monthly_net_benefit: Money | None
     profitable_candidates: int = 0
     profitable_candidates_benefit: Money | None = None
     loss_templates_benefit: Money | None = None

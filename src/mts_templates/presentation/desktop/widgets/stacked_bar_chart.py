@@ -25,11 +25,16 @@ X_LABEL_GAP = 8.0
 Y_LABEL_GAP = 8.0
 Y_LABEL_HEIGHT = 16.0
 PLOT_TOP_GAP = 8.0
-BAR_GAP_RATIO = 0.35
+BAR_GAP = 2.0
 MIN_BAR_WIDTH = 3.0
 MAX_BAR_WIDTH = 46.0
 MIN_PLOT_HEIGHT = 60.0
 EMPTY_TEXT = "Нет данных"
+
+
+def bar_width_for_slot(slot: float) -> float:
+    """Ширина столбца: зазор между столбцами минимальный, но заметный."""
+    return min(max(slot - BAR_GAP, MIN_BAR_WIDTH), MAX_BAR_WIDTH, slot)
 
 
 class StackedBarChart(QWidget):
@@ -201,7 +206,7 @@ class StackedBarChart(QWidget):
     def _draw_bars(self, painter: QPainter, chart: QRectF, top: int) -> None:
         palette = active_palette()
         slot = chart.width() / len(self._bars)
-        bar_width = min(max(slot * (1 - BAR_GAP_RATIO), MIN_BAR_WIDTH), MAX_BAR_WIDTH)
+        bar_width = bar_width_for_slot(slot)
         separator = QPen(QColor(palette.surface), 0.8)
         for index, bar in enumerate(self._bars):
             x = chart.left() + index * slot + (slot - bar_width) / 2

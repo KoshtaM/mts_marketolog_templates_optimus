@@ -84,7 +84,7 @@ def _summary(
         active_templates=0,
         inactive_templates=0,
         candidates=candidates,
-        total_net_benefit=total,
+        total_monthly_net_benefit=total,
         profitable_candidates=profitable_candidates,
         profitable_candidates_benefit=profitable,
         loss_templates_benefit=losses,
@@ -147,7 +147,7 @@ def test_benefit_tooltip_keeps_explanation_first() -> None:
     )
 
     assert tooltip.splitlines() == [
-        "после вычета стоимости шаблонов",
+        "в месяц, после вычета стоимости шаблонов",
         "потенциал: +2 100.00 ₽ в месяц",
         "внедрение кандидатов +1 500.00 ₽ · удаление убыточных шаблонов +600.00 ₽",
     ]

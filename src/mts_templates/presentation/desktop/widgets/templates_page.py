@@ -179,7 +179,7 @@ class TemplatesPage(QWidget):
         self._operator_table, _ = build_table(self._operator_model, self, stretch_column=None)
         self._profit_total = BenefitTotal("Выгода выгодных шаблонов, ₽/мес", self)
         self._loss_total = BenefitTotal("Убыток убыточных шаблонов, ₽/мес", self)
-        self._active_total = BenefitTotal("Выгода действующих шаблонов, ₽/мес", self)
+        self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
         self._operator_title.setWordWrap(True)
         self._busy = BusyOverlay(self._table)
@@ -242,7 +242,7 @@ class TemplatesPage(QWidget):
         totals = QHBoxLayout()
         totals.setContentsMargins(0, 0, 0, 0)
         totals.setSpacing(12)
-        for total in (self._profit_total, self._loss_total, self._active_total):
+        for total in (self._profit_total, self._loss_total, self._all_total):
             totals.addWidget(total, stretch=1)
         right_layout.addLayout(totals)
         right_layout.addWidget(self._summary)
@@ -361,7 +361,7 @@ class TemplatesPage(QWidget):
         self.analysis_completed.emit()
 
     def _fill_totals(self, metrics: tuple[TemplateMetricsView, ...]) -> None:
-        """Суммы по выгодным, убыточным и действующим шаблонам за месяц."""
+        """Суммы по выгодным, убыточным и всем шаблонам за месяц."""
         palette = active_palette()
         profit_color = semantic_text(palette.positive, palette.window)
         loss_color = semantic_text(palette.negative, palette.window)
@@ -374,18 +374,12 @@ class TemplatesPage(QWidget):
             format_money(loss) if loss.amount < 0 else format_money(Money.zero()),
             loss_color,
         )
-        self._active_total.set_value(
-            format_money(
-                sum(
-                    (item.monthly_net_benefit for item in metrics if item.active),
-                    Money.zero(),
-                )
-            ),
-            profit_color,
-        )
+        total = sum((item.monthly_net_benefit for item in metrics), Money.zero())
+        total_color = profit_color if total.amount >= 0 else loss_color
+        self._all_total.set_value(format_money(total), total_color)
 
     def _reset_totals(self) -> None:
-        for total in (self._profit_total, self._loss_total, self._active_total):
+        for total in (self._profit_total, self._loss_total, self._all_total):
             total.reset()
 
     def _select_first_row(self) -> None:

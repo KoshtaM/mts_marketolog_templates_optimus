@@ -226,7 +226,7 @@ OPERATOR_COLUMNS = (
     "Средняя стоимость сегмента",
     "Доля (%)",
 )
-BENEFIT_BASE_HINT = "после вычета стоимости шаблонов"
+BENEFIT_BASE_HINT = "в месяц, после вычета стоимости шаблонов"
 BENEFIT_SAVING_FONT_SIZE = 15
 # Карточки «Процент доставленных» и «Выгода шаблонов» на 30 % шире остальных.
 CARD_WIDTH_FACTOR = 130
@@ -415,7 +415,7 @@ class DashboardPage(QWidget):
             ("delivered_share", "Процент доставленных", "от количества сообщений"),
             ("templates", "Шаблонов", "активных —"),
             ("candidates", "Кандидатов", "по последнему анализу"),
-            ("benefit", "Выгода шаблонов", "после вычета стоимости шаблонов"),
+            ("benefit", "Выгода шаблонов", BENEFIT_BASE_HINT),
         )
         for index, (key, title, hint) in enumerate(definitions):
             row, column = divmod(index, 3)
@@ -729,7 +729,7 @@ class DashboardPage(QWidget):
             _candidates_hint(summary), rich=summary.profitable_candidates_benefit is not None
         )
 
-        benefit = summary.total_net_benefit
+        benefit = summary.total_monthly_net_benefit
         if benefit is None:
             self._cards["benefit"].set_value("—")
             self._cards["benefit"].set_hint("анализ не выполнялся")

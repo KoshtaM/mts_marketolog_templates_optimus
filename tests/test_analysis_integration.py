@@ -89,6 +89,13 @@ def template_rows() -> list[dict[str, object]]:
     ]
 
 
+def partial_statistics_rows() -> list[dict[str, object]]:
+    """Те же строки, но период обрывается 16 ноября: неполный месяц."""
+    return [
+        row for row in statistics_rows() if str(row["Дата попытки отправки"])[:10] <= "2026-11-16"
+    ]
+
+
 @pytest.fixture
 def container(tmp_path: Path):
     settings = load_settings(data_dir=tmp_path / "data")
@@ -155,6 +162,20 @@ def test_analysis_is_cached(tmp_path: Path, container) -> None:
     assert container.database.fetchone("SELECT COUNT(*) AS c FROM analysis_runs")["c"] == 1
 
 
+def test_dashboard_benefit_matches_monthly_template_model(tmp_path: Path, container) -> None:
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", partial_statistics_rows())
+    write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
+    import_report = container.import_statistics.execute(ImportStatisticsRequest(path=statistics))
+    container.import_templates.execute(ImportTemplatesRequest(path=tmp_path / "templates.xlsx"))
+    view = container.analyze_templates.execute(AnalyzeRequest(batch_id=import_report.batch.id))
+
+    summary = container.dashboard.execute(import_report.batch.id)
+
+    assert view.is_partial_period is True
+    assert summary.total_monthly_net_benefit == view.total_monthly_net_benefit
+    assert summary.total_monthly_net_benefit != view.total_net_benefit
+
+
 def test_dashboard_counts_potential_benefit(tmp_path: Path, container) -> None:
     statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", statistics_rows())
     write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
@@ -164,7 +185,7 @@ def test_dashboard_counts_potential_benefit(tmp_path: Path, container) -> None:
 
     summary = container.dashboard.execute(import_report.batch.id)
 
-    assert summary.total_net_benefit.rounded().amount == Decimal("-1988.80")
+    assert summary.total_monthly_net_benefit.rounded().amount == Decimal("-1988.80")
     # Кандидат в сценарии убыточен, прибыльных кандидатов нет.
     assert summary.profitable_candidates == 0
     assert summary.candidates == 1
