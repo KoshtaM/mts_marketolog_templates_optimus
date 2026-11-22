@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from mts_templates.domain.analytics.import_aggregation import QualityIssue
@@ -221,6 +221,30 @@ class OperatorStatistics:
 
 
 @dataclass(frozen=True, slots=True)
+class DailyOperatorSegments:
+    """SMS-сегменты одного оператора получателя за календарный день."""
+
+    operator: str
+    segments: int
+
+
+@dataclass(frozen=True, slots=True)
+class DailySegments:
+    """Сегменты дня с разбивкой по операторам, по убыванию объёма.
+
+    Дни без отправок присутствуют с пустым списком операторов: ось X
+    диаграммы должна покрывать весь период загрузки без пропусков.
+    """
+
+    day: date
+    operators: tuple[DailyOperatorSegments, ...] = ()
+
+    @property
+    def segments(self) -> int:
+        return sum(item.segments for item in self.operators)
+
+
+@dataclass(frozen=True, slots=True)
 class SegmentCountBucket:
     """Сколько абонентов или сообщений приходится на заданное число SMS-сегментов."""
 
@@ -418,6 +442,7 @@ class DashboardSummary:
     warnings: tuple[str, ...] = ()
     operators: tuple[OperatorStatistics, ...] = ()
     segmentation: SegmentationStatistics | None = None
+    daily_segments: tuple[DailySegments, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import date, datetime
 
 from mts_templates.application.dto import (
     BatchStatistics,
+    DailyOperatorSegments,
+    DailySegments,
     OperatorStatistics,
     SegmentationStatistics,
     SegmentCountBucket,
@@ -112,6 +114,38 @@ class SqliteMessageQueryRepository:
                 cost=kopecks_to_money(int(row["cost"])),
             )
             for row in rows
+        )
+
+    def daily_segments(self, batch_id: str) -> tuple[DailySegments, ...]:
+        """Сегменты по календарным дням и операторам получателя.
+
+        Дата берётся из `sent_at` как есть: выгрузка приходит в +03:00,
+        поэтому `substr` даёт календарный день отправителя без сдвига в UTC.
+        Дни без сегментов не возвращаются — их добавляет use case.
+        """
+        rows = self._database.fetchall(
+            """
+            SELECT substr(sent_at, 1, 10) AS day,
+                   operator,
+                   COALESCE(SUM(segments), 0) AS segments
+            FROM messages
+            WHERE batch_id = ? AND segments > 0
+            GROUP BY day, operator
+            ORDER BY day, segments DESC, operator
+            """,
+            (batch_id,),
+        )
+        grouped: dict[str, list[DailyOperatorSegments]] = {}
+        for row in rows:
+            grouped.setdefault(str(row["day"]), []).append(
+                DailyOperatorSegments(
+                    operator=str(row["operator"]),
+                    segments=int(row["segments"]),
+                )
+            )
+        return tuple(
+            DailySegments(day=date.fromisoformat(day), operators=tuple(items))
+            for day, items in sorted(grouped.items())
         )
 
     def segmentation_statistics(self, batch_id: str) -> SegmentationStatistics:

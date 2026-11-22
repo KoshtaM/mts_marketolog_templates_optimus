@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from datetime import date, timedelta
 
-from mts_templates.application.dto import DashboardSummary, ImportBatch
+from mts_templates.application.dto import DailySegments, DashboardSummary, ImportBatch
 from mts_templates.application.ports import (
     AnalysisRepository,
     ImportRepository,
@@ -62,6 +63,11 @@ class GetDashboardSummary:
         statistics = self._messages.statistics(batch.id)
         operators = self._messages.operator_statistics(batch.id)
         segmentation = self._messages.segmentation_statistics(batch.id)
+        daily_segments = fill_period_days(
+            self._messages.daily_segments(batch.id),
+            batch.period_from.date() if batch.period_from else None,
+            batch.period_to.date() if batch.period_to else None,
+        )
         latest = self._analysis.latest(batch.id)
         warnings = list(batch.warnings)
         if latest is not None:
@@ -100,6 +106,7 @@ class GetDashboardSummary:
             warnings=tuple(dict.fromkeys(warnings)),
             operators=operators,
             segmentation=segmentation,
+            daily_segments=daily_segments,
         )
 
 
@@ -124,6 +131,22 @@ def negative_benefit(values: Iterable[Money]) -> Money:
 def profitable_candidates_count(values: Iterable[Money]) -> int:
     """Сколько кандидатов выгодно: количество положительных значений."""
     return sum(1 for value in values if value.amount > 0)
+
+
+def fill_period_days(
+    daily: Sequence[DailySegments],
+    start: date | None,
+    end: date | None,
+) -> tuple[DailySegments, ...]:
+    """Дополнить дни без отправок, чтобы ось X покрывала весь период.
+
+    Без границ периода возвращаются только дни с данными.
+    """
+    if start is None or end is None or end < start:
+        return tuple(daily)
+    by_day = {item.day: item for item in daily}
+    days = (start + timedelta(days=offset) for offset in range((end - start).days + 1))
+    return tuple(by_day.get(day, DailySegments(day=day)) for day in days)
 
 
 def _select(batches: Sequence[ImportBatch], batch_id: str | None) -> ImportBatch | None:

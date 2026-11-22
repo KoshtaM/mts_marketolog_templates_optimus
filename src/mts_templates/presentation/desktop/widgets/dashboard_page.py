@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from mts_templates.application.dto import (
     BatchStatistics,
+    DailySegments,
     DashboardSummary,
     ImportBatch,
     OperatorStatistics,
@@ -31,6 +32,7 @@ from mts_templates.application.dto import (
 )
 from mts_templates.application.use_cases.dashboard import GetDashboardSummary, ListBatches
 from mts_templates.domain.value_objects import Money
+from mts_templates.presentation.desktop.daily_chart import build_daily_chart
 from mts_templates.presentation.desktop.distribution import group_buckets
 from mts_templates.presentation.desktop.formatting import (
     format_average,
@@ -48,9 +50,11 @@ from mts_templates.presentation.desktop.widgets.distribution_chart import (
     DistributionChart,
 )
 from mts_templates.presentation.desktop.widgets.pie_chart import PieChart, PieSlice
+from mts_templates.presentation.desktop.widgets.stacked_bar_chart import StackedBarChart
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 CHART_OPERATOR_LIMIT = 5
+DAILY_CHART_HEIGHT = 300
 
 # Шаблонированные SMS в диаграммах долей — «морская волна»: чистый зелёный
 # зарезервирован за корпоративным цветом МегаФона в диаграммах операторов.
@@ -369,6 +373,7 @@ class DashboardPage(QWidget):
         layout.addWidget(self._batch_label)
         layout.addWidget(self._build_summary())
         layout.addWidget(self._build_main_section())
+        layout.addWidget(self._build_daily_section())
         layout.addWidget(self._build_additional_section())
         layout.addWidget(self._build_warnings_section())
         layout.addStretch(1)
@@ -511,6 +516,34 @@ class DashboardPage(QWidget):
         footer.addStretch(1)
         layout.addLayout(footer)
         return container
+
+    def _build_daily_section(self) -> QWidget:
+        """Блок «Динамика по дням»: составные столбцы сегментов по операторам."""
+        box = QFrame(self)
+        box.setObjectName("sectionCard")
+        box.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Динамика по дням", box)
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+
+        self._daily_chart = StackedBarChart("SMS-сегменты по дням и операторам получателя", box)
+        self._daily_chart.setMinimumHeight(DAILY_CHART_HEIGHT)
+        layout.addWidget(self._daily_chart)
+
+        hint = QLabel(
+            "Столбец дня составлен снизу вверх по убыванию массовости оператора за этот день; "
+            "цвета совпадают с диаграммой «Сегменты по операторам».",
+            box,
+        )
+        hint.setObjectName("sectionHint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        return box
 
     def _build_additional_section(self) -> QWidget:
         """Блок «Дополнительно»: абоненты и распределения по числу SMS-сегментов."""
@@ -672,6 +705,7 @@ class DashboardPage(QWidget):
         self._fill_cards(summary)
         self._fill_main(statistics)
         self._fill_operators(summary.operators)
+        self._fill_daily(summary.daily_segments)
         self._fill_additional(summary.segmentation)
 
         lines = list(summary.warnings)
@@ -752,6 +786,10 @@ class DashboardPage(QWidget):
             )
         )
 
+    def _fill_daily(self, daily: Sequence[DailySegments]) -> None:
+        data = build_daily_chart(daily)
+        self._daily_chart.set_data(data.bars, legend=data.legend, caption=data.caption)
+
     def _fill_additional(self, segmentation: SegmentationStatistics | None) -> None:
         if segmentation is None:
             self._fill_additional_empty()
@@ -802,6 +840,7 @@ class DashboardPage(QWidget):
             chart.set_slices(())
         self._fill_additional_empty()
         self._fill_operators(())
+        self._fill_daily(())
         self._batch_label.setText("Статистика ещё не импортирована.")
         warnings = summary.warnings if summary is not None else ()
         self._warnings.setPlainText("\n".join(f"• {line}" for line in warnings))

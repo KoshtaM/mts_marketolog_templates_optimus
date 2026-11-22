@@ -8,6 +8,7 @@ from typing import Protocol
 
 from mts_templates.application.dto import (
     BatchStatistics,
+    DailySegments,
     ExportReportResult,
     ImportBatch,
     OperatorStatistics,
@@ -80,6 +81,8 @@ class MessageQueryRepository(Protocol):
     def operator_statistics(self, batch_id: str) -> tuple[OperatorStatistics, ...]: ...
 
     def segmentation_statistics(self, batch_id: str) -> SegmentationStatistics: ...
+
+    def daily_segments(self, batch_id: str) -> tuple[DailySegments, ...]: ...
 
 
 class AnalysisRepository(Protocol):
