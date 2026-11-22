@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 
-from mts_templates.domain.analytics.canonical import signature_of
+from mts_templates.domain.analytics.canonical import signature_of, tokenize
 from mts_templates.domain.analytics.csg import (
     CandidateStatus,
     CsgConfig,
@@ -110,6 +110,26 @@ def test_signature_treats_url_email_phone_as_word() -> None:
         assert any(element.kind.value == "word_var" for element in signature.elements), text
 
 
+def test_tokenize_keeps_surface_case_and_punctuation() -> None:
+    tokens = tokenize("Заказ №123 — готов, заберите в Интернет-магазин!")
+    assert [token.value for token in tokens] == [
+        "заказ",
+        "no123",
+        "готов",
+        "заберите",
+        "в",
+        "интернетмагазин",
+    ]
+    assert [token.surface for token in tokens] == [
+        "Заказ",
+        "№123",
+        "— готов,",
+        "заберите",
+        "в",
+        "Интернет-магазин!",
+    ]
+
+
 # --- Линтер -----------------------------------------------------------------
 
 
@@ -142,9 +162,35 @@ def test_lint_accepts_date_and_time_as_two_numbers() -> None:
 def test_exact_group_becomes_auto_validated_candidate() -> None:
     messages = [message(f"m{index}", "Ваш код 1234 для входа", segments=1) for index in range(6)]
     extraction = extract_candidates(build_signature_groups(messages, CsgConfig()), CsgConfig())
-    candidate = by_text(extraction, "ваш код %d для входа")
+    candidate = by_text(extraction, "Ваш код %d для входа")
     assert candidate.status is CandidateStatus.AUTO_VALIDATED
     assert candidate.foreign_matches == 0
+
+
+def test_template_keeps_punctuation_and_dash() -> None:
+    messages = [
+        message(f"m{index}", f"Заказ {index} — готов, заберите в пункте «Выдача»!")
+        for index in range(6)
+    ]
+    extraction = extract_candidates(build_signature_groups(messages, CsgConfig()), CsgConfig())
+    assert texts_of(extraction.candidates) == ("Заказ %d — готов, заберите в пункте «Выдача»!",)
+
+
+def test_template_uses_most_frequent_surface_form() -> None:
+    messages = [message(f"u{index}", "ВАШ КОД 1234 ДЛЯ ВХОДА") for index in range(4)] + [
+        message(f"l{index}", "ваш код 5678 для входа") for index in range(2)
+    ]
+    extraction = extract_candidates(build_signature_groups(messages, CsgConfig()), CsgConfig())
+    assert texts_of(extraction.candidates) == ("ВАШ КОД %d ДЛЯ ВХОДА",)
+
+
+def test_punctuation_variants_do_not_split_group() -> None:
+    messages = [message(f"a{index}", "Заказ 123 готов!") for index in range(3)] + [
+        message(f"b{index}", "Заказ 456 готов") for index in range(3)
+    ]
+    extraction = extract_candidates(build_signature_groups(messages, CsgConfig()), CsgConfig())
+    candidate = by_text(extraction, "Заказ %d готов")
+    assert candidate.message_count == 6
 
 
 def test_groups_require_min_support_and_segments() -> None:
@@ -175,7 +221,7 @@ def test_sender_case_sensitive_splits_groups() -> None:
     config = CsgConfig(sender_case_sensitive=True)
     extraction = extract_candidates(build_signature_groups(messages, config), config)
     candidates = [
-        item for item in extraction.candidates if item.template_text == "ваш код %d для входа"
+        item for item in extraction.candidates if item.template_text == "Ваш код %d для входа"
     ]
     assert len(candidates) == 2
     assert {candidate.sender for candidate in candidates} == {"TEST", "test"}
@@ -188,7 +234,7 @@ def test_sender_case_folding_warns_about_merged_senders() -> None:
     ] + [message(f"l{index}", "Ваш код 1234 для входа", sender="test") for index in range(3)]
     config = CsgConfig()
     extraction = extract_candidates(build_signature_groups(messages, config), config)
-    candidate = by_text(extraction, "ваш код %d для входа")
+    candidate = by_text(extraction, "Ваш код %d для входа")
     assert candidate.status is CandidateStatus.WARNING_SAVED
     assert {message.sender for message in candidate.messages} == {"TEST", "test"}
 
@@ -203,7 +249,7 @@ def test_template_must_cover_all_group_messages() -> None:
     ]
     config = CsgConfig()
     extraction = extract_candidates(build_signature_groups(messages, config), config)
-    assert texts_of(extraction.candidates) == ("запись на %d %d по адресу г пермь",)
+    assert texts_of(extraction.candidates) == ("Запись на %d %d по адресу г Пермь",)
 
 
 # --- Слияние литеральных участков -------------------------------------------
@@ -246,7 +292,7 @@ def test_slot_merge_requires_human_approval() -> None:
     extraction = merged_extraction(messages)
     candidate = by_text(
         extraction,
-        "запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт",
+        "Запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт",
     )
     assert candidate.status is CandidateStatus.NEEDS_HUMAN_APPROVAL
     assert candidate.confidence == Decimal("0.9")
@@ -256,11 +302,11 @@ def test_tail_suffix_splits_brand_variants() -> None:
     plain = appointment_messages(8, start=0)
     branded = appointment_messages(8, start=10, suffix=" DOCTORLIGHT")
     extraction = merged_extraction(plain + branded)
-    assert "запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт" in texts_of(
+    assert "Запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт" in texts_of(
         extraction.candidates
     )
     assert (
-        "запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт doctorlight"
+        "Запись на %d %d по адресу г %w{1,2} специалист %w{1,3} возьмите паспорт DOCTORLIGHT"
         in texts_of(extraction.candidates)
     )
 
@@ -302,6 +348,6 @@ def test_exact_candidate_absorbs_fully_covered_groups() -> None:
     messages = [message(f"m{index}", "Ваш код 1234 для входа", segments=1) for index in range(6)]
     config = CsgConfig()
     extraction = extract_candidates(build_signature_groups(messages, config), config)
-    candidate = by_text(extraction, "ваш код %d для входа")
+    candidate = by_text(extraction, "Ваш код %d для входа")
     assert len(candidate.groups) == 1
     assert candidate.message_count == 6

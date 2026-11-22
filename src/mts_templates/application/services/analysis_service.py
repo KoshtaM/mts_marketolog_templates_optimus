@@ -52,6 +52,7 @@ WARNING_NO_TEMPLATED_RATE = (
 )
 BENEFIT_FORMULA_VERSION = 2
 SEGMENTATION_VERSION = 2
+CANDIDATE_TEXT_VERSION = 2
 
 
 def compute_config_hash(
@@ -65,6 +66,7 @@ def compute_config_hash(
         "baseline_mode": config.baseline_mode,
         "benefit_formula": BENEFIT_FORMULA_VERSION,
         "segmentation": SEGMENTATION_VERSION,
+        "candidate_text": CANDIDATE_TEXT_VERSION,
         "delivered_only": config.delivered_only,
         "min_support": config.min_support,
         "min_cluster_segments": config.min_cluster_segments,

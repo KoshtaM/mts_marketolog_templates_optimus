@@ -54,7 +54,7 @@ from mts_templates.presentation.desktop.models.table_view import build_table, fi
 from mts_templates.presentation.desktop.table_filters import operator_rows_for_template
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
-from mts_templates.presentation.desktop.widgets.busy_bar import BusyBar
+from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 OPERATOR_TITLE = "Срабатывание по операторам получателя"
@@ -170,7 +170,7 @@ class TemplatesPage(QWidget):
         self._warnings = QPlainTextEdit(self)
         self._warnings.setObjectName("warningsView")
         self._warnings.setReadOnly(True)
-        self._warnings.setMaximumHeight(90)
+        self._warnings.setMaximumHeight(180)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
         self._table, self._proxy = build_table(self._model, self, stretch_column=0)
         self._operator_model = RowsTableModel(
@@ -182,7 +182,7 @@ class TemplatesPage(QWidget):
         self._active_total = BenefitTotal("Выгода действующих шаблонов, ₽/мес", self)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
         self._operator_title.setWordWrap(True)
-        self._busy = BusyBar(self)
+        self._busy = BusyOverlay(self._table)
 
         self._build()
         self.reload()
@@ -196,7 +196,6 @@ class TemplatesPage(QWidget):
         top.addWidget(self._analyze_button)
         top.addWidget(self._recalc_button)
         layout.addLayout(top)
-        layout.addWidget(self._busy)
 
         self._filter.setPlaceholderText("Фильтр по названию, отправителю или тексту шаблона")
         layout.addWidget(self._filter)
@@ -204,10 +203,8 @@ class TemplatesPage(QWidget):
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self._table)
         splitter.addWidget(self._build_operator_section())
-        splitter.addWidget(self._warnings)
         splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 2)
-        splitter.setStretchFactor(2, 1)
+        splitter.setStretchFactor(1, 3)
         layout.addWidget(splitter, stretch=1)
 
         self._analyze_button.clicked.connect(lambda: self._analyze(force=False))
@@ -219,7 +216,7 @@ class TemplatesPage(QWidget):
         self._show_operator_rows(None)
 
     def _build_operator_section(self) -> QWidget:
-        """Таблица операторов выбранного шаблона; справа — сводка и итоги."""
+        """Таблица операторов выбранного шаблона; справа — итоги, сводка и предупреждения."""
         container = QWidget(self)
         row = QHBoxLayout(container)
         row.setContentsMargins(0, 0, 0, 0)
@@ -230,7 +227,7 @@ class TemplatesPage(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(4)
         left_layout.addWidget(self._operator_title)
-        left_layout.addWidget(self._operator_table)
+        left_layout.addWidget(self._operator_table, stretch=1)
 
         self._summary.setWordWrap(True)
         self._summary.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -241,7 +238,6 @@ class TemplatesPage(QWidget):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
-        right_layout.addWidget(self._summary)
 
         totals = QHBoxLayout()
         totals.setContentsMargins(0, 0, 0, 0)
@@ -249,6 +245,8 @@ class TemplatesPage(QWidget):
         for total in (self._profit_total, self._loss_total, self._active_total):
             totals.addWidget(total, stretch=1)
         right_layout.addLayout(totals)
+        right_layout.addWidget(self._summary)
+        right_layout.addWidget(self._warnings)
         right_layout.addStretch(1)
 
         row.addWidget(left, stretch=0)
@@ -306,6 +304,7 @@ class TemplatesPage(QWidget):
     def refresh_theme(self) -> None:
         """Пересчитать цвета строк и итогов под активную тему."""
         self._row_palette = _theme_row_palette()
+        self._busy.refresh_theme()
         self._model.refresh()
         self._operator_model.refresh()
         rows = self._model.rows()

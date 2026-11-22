@@ -124,7 +124,7 @@ def test_full_analysis_scenario(tmp_path: Path, container) -> None:
 
     assert len(view.candidates) == 1
     candidate = view.candidates[0]
-    assert candidate.template_text == "заказ %d готов к выдаче"
+    assert candidate.template_text == "Заказ %d готов к выдаче"
     assert candidate.messages == 6
     assert candidate.actual_cost.rounded().amount == Decimal("57.60")
     assert candidate.templated_cost.rounded().amount == Decimal("24.00")

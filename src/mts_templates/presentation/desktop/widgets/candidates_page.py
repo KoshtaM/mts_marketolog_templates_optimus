@@ -48,7 +48,7 @@ from mts_templates.presentation.desktop.widgets.benefit_totals import (
     BenefitTotal,
     neutral_color,
 )
-from mts_templates.presentation.desktop.widgets.busy_bar import BusyBar
+from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 STATUS_TITLES = {
@@ -138,7 +138,7 @@ class CandidatesPage(QWidget):
             min_stretch_width=CANDIDATE_STRETCH_WIDTH,
         )
         self._profit_total = BenefitTotal("Выгода в месяц от внедрения выгодных кандидатов", self)
-        self._busy = BusyBar(self)
+        self._busy = BusyOverlay(self._table)
 
         self._build()
         self.reload()
@@ -152,7 +152,6 @@ class CandidatesPage(QWidget):
         top.addWidget(self._search_button)
         top.addWidget(self._recalc_button)
         layout.addLayout(top)
-        layout.addWidget(self._busy)
 
         self._filter.setPlaceholderText("Фильтр по тексту шаблона или отправителю")
         layout.addWidget(self._filter)
@@ -217,6 +216,7 @@ class CandidatesPage(QWidget):
     def refresh_theme(self) -> None:
         """Пересчитать цвета строк и итога под активную тему."""
         self._row_palette = _theme_row_palette()
+        self._busy.refresh_theme()
         self._model.refresh()
         if self._candidates:
             self._update_profit_total(self._candidates)

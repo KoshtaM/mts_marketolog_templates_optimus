@@ -5,6 +5,10 @@
 → слияние одного литерального участка в `%w{1,n}` (только с подтверждением)
 → линтер → проверка полным совпадением → защита от чужих совпадений.
 
+Нормализация нужна только для сравнения. В текст шаблона литералы попадают в
+исходной форме (`SignatureElement.surface`): регистр, пунктуация и тире
+сохраняются, поэтому кандидат не превращается в нижний регистр.
+
 Никакой нечёткой близости: группы строятся только по точному тождеству
 сигнатуры. Слияние литералов — единственное обобщение, и оно всегда требует
 ручного подтверждения.
@@ -14,7 +18,7 @@ from __future__ import annotations
 
 import itertools
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -266,6 +270,7 @@ class _Accumulator:
     elements: tuple[SignatureElement, ...]
     messages: list[SmsMessage] = field(default_factory=list)
     run_lengths: dict[int, set[int]] = field(default_factory=lambda: defaultdict(set))
+    surfaces: dict[int, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
 
 
 def build_signature_groups(
@@ -292,12 +297,15 @@ def build_signature_groups(
             )
             accumulators[key] = accumulator
         accumulator.messages.append(message)
+        for index, element in enumerate(signature.elements):
+            if element.surface:
+                accumulator.surfaces[index][element.surface] += 1
         for slot, length in enumerate(signature.run_lengths):
             accumulator.run_lengths[slot].add(length)
 
     groups: list[SignatureGroup] = []
     for accumulator in accumulators.values():
-        signature = CanonicalSignature(elements=accumulator.elements)
+        signature = CanonicalSignature(elements=_surface_elements(accumulator))
         slots = signature.numeric_slots
         run_lengths = tuple(
             tuple(sorted(accumulator.run_lengths.get(index, {1}))) for index in range(slots)
@@ -313,6 +321,38 @@ def build_signature_groups(
         )
     groups.sort(key=lambda group: (-group.message_count, group.sender_key, group.signature.key))
     return tuple(groups)
+
+
+def _surface_elements(accumulator: _Accumulator) -> tuple[SignatureElement, ...]:
+    """Элементы группы с исходной формой литералов, выбранной по большинству."""
+    return tuple(
+        SignatureElement(
+            kind=element.kind,
+            value=element.value,
+            limit=element.limit,
+            surface=(
+                _voted_surface(accumulator.surfaces.get(index, Counter()).items())
+                if element.kind is ElementKind.LITERAL
+                else ""
+            ),
+        )
+        for index, element in enumerate(accumulator.elements)
+    )
+
+
+def _voted_surface(votes: Iterable[tuple[str, int]]) -> str:
+    """Выбрать исходную форму литерала: чаще всего, при равенстве — первая по алфавиту.
+
+    Знаки `%` и `|` из поверхности исключаются: в тексте шаблона они начинают
+    переменную и запрещены правилами МТС.
+    """
+    counts: Counter[str] = Counter()
+    for surface, weight in votes:
+        if surface and "%" not in surface and "|" not in surface:
+            counts[surface] += weight
+    if not counts:
+        return ""
+    return min(counts.items(), key=lambda item: (-item[1], item[0]))[0]
 
 
 def emit_template(group: SignatureGroup, config: CsgConfig) -> tuple[str, tuple[Issue, ...]]:
@@ -839,24 +879,9 @@ def _merged_elements(
         if slot.kind is _LITERAL_SLOT:
             pattern = qualifying.get(index)
             if pattern is None:
-                elements.extend(sample[slot.start : slot.end])
+                elements.extend(_kept_slot_elements(bucket, index))
                 continue
-            elements.extend(
-                SignatureElement(kind=ElementKind.LITERAL, value=token) for token in pattern.prefix
-            )
-            if pattern.left_limit > 0:
-                elements.append(
-                    SignatureElement(kind=ElementKind.WORD_VARIABLE, limit=pattern.left_limit)
-                )
-            if pattern.anchor is not None:
-                elements.append(SignatureElement(kind=ElementKind.LITERAL, value=pattern.anchor))
-            if pattern.right_limit > 0:
-                elements.append(
-                    SignatureElement(kind=ElementKind.WORD_VARIABLE, limit=pattern.right_limit)
-                )
-            elements.extend(
-                SignatureElement(kind=ElementKind.LITERAL, value=token) for token in pattern.suffix
-            )
+            elements.extend(_pattern_elements(bucket, index, pattern))
             continue
         if slot.kind is _NUMBER_SLOT:
             collected: set[int] = set()
@@ -868,6 +893,80 @@ def _merged_elements(
             continue
         elements.extend(sample[slot.start : slot.end])
     return tuple(elements), tuple(run_lengths)
+
+
+def _slot_of(unit: _Unit, index: int) -> _Slot:
+    return _slots(unit.elements)[index]
+
+
+def _literal(value: str, votes: Iterable[tuple[str, int]]) -> SignatureElement:
+    return SignatureElement(
+        kind=ElementKind.LITERAL,
+        value=value,
+        surface=_voted_surface(votes) or value,
+    )
+
+
+def _kept_slot_elements(units: Sequence[_Unit], index: int) -> tuple[SignatureElement, ...]:
+    """Литеральный участок, который остаётся неизменным: значения и форма из групп."""
+    slots = [_slot_of(unit, index) for unit in units]
+    sample = units[0].elements
+    slot = slots[0]
+    return tuple(
+        _literal(
+            sample[slot.start + offset].value,
+            (
+                (unit.elements[slots[position].start + offset].surface, unit.message_count)
+                for position, unit in enumerate(units)
+            ),
+        )
+        for offset in range(slot.end - slot.start)
+    )
+
+
+def _pattern_elements(
+    units: Sequence[_Unit], index: int, pattern: _SlotPattern
+) -> tuple[SignatureElement, ...]:
+    elements: list[SignatureElement] = []
+    elements.extend(_aligned_slot_elements(units, index, pattern.prefix, from_end=False))
+    if pattern.left_limit > 0:
+        elements.append(SignatureElement(kind=ElementKind.WORD_VARIABLE, limit=pattern.left_limit))
+    if pattern.anchor is not None:
+        elements.append(_literal(pattern.anchor, _anchor_votes(units, index, pattern.anchor)))
+    if pattern.right_limit > 0:
+        elements.append(SignatureElement(kind=ElementKind.WORD_VARIABLE, limit=pattern.right_limit))
+    elements.extend(_aligned_slot_elements(units, index, pattern.suffix, from_end=True))
+    return tuple(elements)
+
+
+def _aligned_slot_elements(
+    units: Sequence[_Unit],
+    index: int,
+    values: Sequence[str],
+    *,
+    from_end: bool,
+) -> tuple[SignatureElement, ...]:
+    result: list[SignatureElement] = []
+    for offset, value in enumerate(values):
+        votes: list[tuple[str, int]] = []
+        for unit in units:
+            slot = _slot_of(unit, index)
+            position = slot.end - len(values) + offset if from_end else slot.start + offset
+            if 0 <= position < len(unit.elements) and unit.elements[position].value == value:
+                votes.append((unit.elements[position].surface, unit.message_count))
+        result.append(_literal(value, votes))
+    return tuple(result)
+
+
+def _anchor_votes(units: Sequence[_Unit], index: int, anchor: str) -> list[tuple[str, int]]:
+    votes: list[tuple[str, int]] = []
+    for unit in units:
+        slot = _slot_of(unit, index)
+        for element in unit.elements[slot.start : slot.end]:
+            if element.value == anchor:
+                votes.append((element.surface, unit.message_count))
+                break
+    return votes
 
 
 def extract_candidates(groups: Sequence[SignatureGroup], config: CsgConfig) -> CsgExtraction:
@@ -1087,7 +1186,7 @@ def _emit_elements(
     slot = 0
     for element in elements:
         if element.kind is ElementKind.LITERAL:
-            parts.append(element.value)
+            parts.append(element.surface or element.value)
             continue
         if element.kind is ElementKind.NUMBER_RUN:
             lengths = tuple(run_lengths[slot]) if slot < len(run_lengths) else (1,)
