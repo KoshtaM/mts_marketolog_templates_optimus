@@ -10,7 +10,9 @@ from mts_templates.presentation.desktop.widgets.stacked_bar_chart import (
     BAR_GAP_RATIO,
     MIN_BAR_WIDTH,
     MIN_OVERLAY_HEIGHT,
+    OVERLAY_BASE_RATIO,
     bar_width_for_slot,
+    overlay_base_offset,
     overlay_geometry,
 )
 
@@ -42,21 +44,21 @@ def test_narrow_slot_does_not_overlap() -> None:
     assert width <= MIN_BAR_WIDTH
 
 
-def test_overlay_starts_inside_the_bar() -> None:
-    offset, height = overlay_geometry(100.0, 10.0, 0.1)
+def test_overlay_starts_at_given_base_offset() -> None:
+    offset, height = overlay_geometry(100.0, 10.0, 10.0)
 
     assert offset == pytest.approx(10.0)
     assert height == pytest.approx(10.0)
 
 
 def test_small_overlay_keeps_minimal_visible_height() -> None:
-    _offset, height = overlay_geometry(100.0, 0.5, 0.1)
+    _offset, height = overlay_geometry(100.0, 0.5, 10.0)
 
     assert height == pytest.approx(MIN_OVERLAY_HEIGHT)
 
 
 def test_overlay_does_not_rise_above_the_bar() -> None:
-    offset, height = overlay_geometry(100.0, 100.0, 0.1)
+    offset, height = overlay_geometry(100.0, 100.0, 10.0)
 
     assert offset == pytest.approx(10.0)
     assert height == pytest.approx(90.0)
@@ -64,21 +66,40 @@ def test_overlay_does_not_rise_above_the_bar() -> None:
 
 
 def test_overlay_of_tiny_bar_stays_within_it() -> None:
-    offset, height = overlay_geometry(1.0, 1.0, 0.1)
+    offset, height = overlay_geometry(1.0, 1.0, 0.2)
 
     assert offset + height <= 1.0
 
 
 def test_zero_values_have_no_overlay() -> None:
-    assert overlay_geometry(0.0, 10.0, 0.1) is None
-    assert overlay_geometry(100.0, 0.0, 0.1) is None
+    assert overlay_geometry(0.0, 10.0, 1.0) is None
+    assert overlay_geometry(100.0, 0.0, 1.0) is None
+
+
+def test_overlay_base_offset_uses_smallest_nonzero_bar() -> None:
+    assert overlay_base_offset([100.0, 20.0, 0.0]) == pytest.approx(20.0 * OVERLAY_BASE_RATIO)
+
+
+def test_overlay_base_offset_without_nonzero_bars_is_zero() -> None:
+    assert overlay_base_offset([0.0, 0.0]) == 0.0
+    assert overlay_base_offset([]) == 0.0
+
+
+def test_overlays_of_different_bars_start_at_the_same_height() -> None:
+    base_offset = overlay_base_offset([100.0, 40.0, 0.0])
+    tall_offset, _ = overlay_geometry(100.0, 10.0, base_offset)
+    short_offset, _ = overlay_geometry(40.0, 5.0, base_offset)
+
+    assert base_offset == pytest.approx(8.0)
+    assert tall_offset == pytest.approx(short_offset)
+    assert tall_offset == pytest.approx(8.0)
 
 
 def test_bar_total_counts_only_the_base_column() -> None:
     bar = StackedBar(
         label="01.11",
         segments=(StackedSegment("Остальной трафик", 9.0, "#0d9488"),),
-        overlays=(BarOverlay("Соответствуют шаблону", 5.0, "#ff8c00", 0.1),),
+        overlays=(BarOverlay("Соответствуют шаблону", 5.0, "#ff8c00"),),
     )
 
     assert bar.total == 9.0

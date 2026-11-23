@@ -8,7 +8,6 @@ from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.presentation.desktop.daily_chart import (
     TEMPLATE_MATCHED_COLOR,
     TEMPLATE_MATCHED_LABEL,
-    TEMPLATE_MATCHED_OFFSET_RATIO,
     TEMPLATE_OTHER_COLOR,
     TEMPLATE_OTHER_LABEL,
     TEMPLATE_OTHER_TEMPLATED_LABEL,
@@ -44,16 +43,8 @@ def test_matched_part_is_overlay_inside_the_base_bar() -> None:
     assert [(part.label, part.value, part.color) for part in bar.segments] == [
         (TEMPLATE_OTHER_LABEL, 9.0, TEMPLATE_OTHER_COLOR),
     ]
-    assert [
-        (overlay.label, overlay.value, overlay.color, overlay.offset_ratio)
-        for overlay in bar.overlays
-    ] == [
-        (
-            TEMPLATE_MATCHED_LABEL,
-            5.0,
-            TEMPLATE_MATCHED_COLOR,
-            TEMPLATE_MATCHED_OFFSET_RATIO,
-        )
+    assert [(overlay.label, overlay.value, overlay.color) for overlay in bar.overlays] == [
+        (TEMPLATE_MATCHED_LABEL, 5.0, TEMPLATE_MATCHED_COLOR)
     ]
     assert bar.total == 9.0
 

@@ -30,6 +30,11 @@ BAR_GAP_RATIO = 0.2
 MIN_BAR_WIDTH = 3.0
 MIN_OVERLAY_HEIGHT = 2.0
 MIN_PLOT_HEIGHT = 60.0
+MIN_WIDTH = 320
+COMPACT_MIN_WIDTH = 240
+# Накладки всех столбцов начинаются на 20 % высоты самого маленького ненулевого
+# столбца: так оранжевые части дневного графика стоят на одной высоте.
+OVERLAY_BASE_RATIO = 0.2
 EMPTY_TEXT = "Нет данных"
 
 
@@ -39,19 +44,31 @@ def bar_width_for_slot(slot: float) -> float:
     return min(max(slot - gap, MIN_BAR_WIDTH), slot)
 
 
+def overlay_base_offset(
+    bar_heights: Sequence[float],
+    ratio: float = OVERLAY_BASE_RATIO,
+) -> float:
+    """Общее начало накладок: доля высоты самого маленького ненулевого столбца."""
+    nonzero = [height for height in bar_heights if height > 0]
+    if not nonzero or ratio <= 0:
+        return 0.0
+    return min(nonzero) * ratio
+
+
 def overlay_geometry(
     bar_height: float,
     value_height: float,
-    offset_ratio: float,
+    base_offset: float,
 ) -> tuple[float, float] | None:
     """Смещение от основания и высота накладки внутри столбца.
 
-    Накладка начинается на `offset_ratio` высоты столбца, не выходит за его
-    верх и остаётся видимой даже при малом значении. `None` — рисовать нечего.
+    `base_offset` — общая для всех столбцов высота начала накладки в пикселях.
+    Накладка не выходит за верх столбца и остаётся видимой даже при малом
+    значении. `None` — рисовать нечего.
     """
     if bar_height <= 0 or value_height <= 0:
         return None
-    offset = bar_height * max(offset_ratio, 0.0)
+    offset = min(max(base_offset, 0.0), max(bar_height - MIN_OVERLAY_HEIGHT, 0.0))
     available = bar_height - offset
     if available <= 0:
         return None
@@ -78,7 +95,7 @@ class StackedBarChart(QWidget):
         self._caption = ""
         self._bars: tuple[StackedBar, ...] = ()
         self._legend: tuple[tuple[str, str], ...] = ()
-        self.setMinimumSize(320, 150 if compact else 240)
+        self.setMinimumSize(COMPACT_MIN_WIDTH if compact else MIN_WIDTH, 150 if compact else 240)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_data(
@@ -236,6 +253,8 @@ class StackedBarChart(QWidget):
         slot = chart.width() / len(self._bars)
         bar_width = bar_width_for_slot(slot)
         separator = QPen(QColor(palette.surface), 0.8)
+        heights = [(bar.total / top) * chart.height() if top else 0.0 for bar in self._bars]
+        base_offset = overlay_base_offset(heights)
         for index, bar in enumerate(self._bars):
             x = chart.left() + index * slot + (slot - bar_width) / 2
             cumulative = 0.0
@@ -248,7 +267,17 @@ class StackedBarChart(QWidget):
                 painter.setBrush(QColor(segment.color))
                 painter.drawRect(rect)
                 cumulative += height
-            self._draw_overlays(painter, chart, bar, x, bar_width, cumulative, top, separator)
+            self._draw_overlays(
+                painter,
+                chart,
+                bar,
+                x,
+                bar_width,
+                heights[index],
+                base_offset,
+                top,
+                separator,
+            )
 
     def _draw_overlays(
         self,
@@ -258,15 +287,16 @@ class StackedBarChart(QWidget):
         x: float,
         bar_width: float,
         bar_height: float,
+        base_offset: float,
         top: int,
         separator: QPen,
     ) -> None:
-        """Накладки внутри основного столбца: смещение от основания и высота."""
+        """Накладки внутри основного столбца: общее начало и высота по значению."""
         if not bar.overlays or top <= 0:
             return
         for overlay in bar.overlays:
             value_height = (overlay.value / top) * chart.height()
-            geometry = overlay_geometry(bar_height, value_height, overlay.offset_ratio)
+            geometry = overlay_geometry(bar_height, value_height, base_offset)
             if geometry is None:
                 continue
             offset, height = geometry

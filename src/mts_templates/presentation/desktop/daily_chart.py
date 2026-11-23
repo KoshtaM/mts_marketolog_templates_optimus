@@ -20,7 +20,6 @@ TEMPLATE_OTHER_COLOR = "#0d9488"
 TEMPLATE_MATCHED_LABEL = "Соответствуют шаблону"
 TEMPLATE_OTHER_LABEL = "Остальной трафик"
 TEMPLATE_OTHER_TEMPLATED_LABEL = "Остальной шаблонированный трафик"
-TEMPLATE_MATCHED_OFFSET_RATIO = 0.1
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +33,15 @@ class StackedSegment:
 
 @dataclass(frozen=True, slots=True)
 class BarOverlay:
-    """Часть, рисуемая поверх основного столбца со смещением от его основания."""
+    """Часть, рисуемая поверх основного столбца.
+
+    Вертикальное положение накладки задаёт диаграмма: все накладки начинаются
+    на одной высоте, поэтому в данных хранятся только значение и цвет.
+    """
 
     label: str
     value: float
     color: str
-    offset_ratio: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +110,8 @@ def build_template_daily_chart(
 
     `totals` — базовый ряд: весь трафик дня или только шаблонированные SMS.
     Основной столбец (teal) показывает базовый объём целиком, совпавшие сегменты
-    (dark orange) рисуются поверх него на 10 % высоты столбца. Дни без данных
-    заполняются нулями, чтобы ось X покрывала период целиком.
+    (dark orange) рисуются поверх него на общей высоте от основания. Дни без
+    данных заполняются нулями, чтобы ось X покрывала период целиком.
     """
     total_by_day = {item.day: item.segments for item in totals}
     matched_by_day = {item.day: item.segments for item in matched}
@@ -132,7 +134,6 @@ def build_template_daily_chart(
                     TEMPLATE_MATCHED_LABEL,
                     float(day_matched),
                     TEMPLATE_MATCHED_COLOR,
-                    TEMPLATE_MATCHED_OFFSET_RATIO,
                 )
             )
         bars.append(
