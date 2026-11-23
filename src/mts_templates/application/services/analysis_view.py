@@ -11,6 +11,7 @@ from mts_templates.application.dto import (
     OperatorTriggerView,
     TemplateMetricsView,
 )
+from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.domain.analytics.analysis import (
     PARTIAL_PERIOD_DAYS,
     AnalysisRun,
@@ -25,10 +26,20 @@ def _scale(value: int, factor: Decimal) -> int:
     return int((Decimal(value) * factor).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _total_segments(daily: Sequence[DaySegments]) -> int:
+    return sum(item.segments for item in daily)
+
+
+def _share(part: int, total: int) -> float:
+    return part / total if total else 0.0
+
+
 def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> AnalysisView:
     """Дополнить метрики реквизитами шаблонов для UI и отчёта."""
     by_id = {template.template_id: template for template in templates}
     factor = monthly_factor(run.period)
+    total_segments = _total_segments(run.daily_segments)
+    templated_segments = _total_segments(run.daily_templated_segments)
     metrics = tuple(
         TemplateMetricsView(
             template_id=item.template_id,
@@ -57,6 +68,8 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
             monthly_actual_cost=item.actual_cost * factor,
             monthly_baseline_cost=item.baseline_cost * factor,
             monthly_net_benefit=monthly_net_benefit(item, factor),
+            share_of_all_segments=_share(item.matched_segments, total_segments),
+            share_of_templated_segments=_share(item.matched_segments, templated_segments),
             daily_segments=item.daily_segments,
         )
         for item in run.metrics

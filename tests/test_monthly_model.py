@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+
+import pytest
 
 from mts_templates.application.dto import BatchStatistics
 from mts_templates.application.services.analysis_view import to_analysis_view
-from mts_templates.domain.analytics.activity import TemplateMetrics
+from mts_templates.domain.analytics.activity import DaySegments, TemplateMetrics
 from mts_templates.domain.analytics.analysis import (
     DAYS_IN_MONTH,
     PARTIAL_PERIOD_DAYS,
@@ -35,7 +37,12 @@ def test_partial_period_is_scaled_to_30_days() -> None:
     assert monthly_factor(_period(1)) == DAYS_IN_MONTH
 
 
-def _run(period: Period) -> AnalysisRun:
+def _run(
+    period: Period,
+    *,
+    daily: tuple[DaySegments, ...] = (),
+    templated: tuple[DaySegments, ...] = (),
+) -> AnalysisRun:
     metrics = TemplateMetrics(
         template_id="t1",
         matched_messages=100,
@@ -61,6 +68,8 @@ def _run(period: Period) -> AnalysisRun:
         matched_message_count=100,
         metrics=(metrics,),
         candidates=(),
+        daily_segments=daily,
+        daily_templated_segments=templated,
     )
 
 
@@ -104,6 +113,36 @@ def test_template_view_carries_registered_operators() -> None:
     view = to_analysis_view(_run(_period(30)), (_template(),))
 
     assert view.metrics[0].operators == ("MTS", "Tele2")
+
+
+def test_template_segment_shares_use_period_totals() -> None:
+    view = to_analysis_view(
+        _run(
+            _period(30),
+            daily=(
+                DaySegments(day=date(2026, 11, 1), segments=300),
+                DaySegments(day=date(2026, 11, 2), segments=100),
+            ),
+            templated=(DaySegments(day=date(2026, 11, 1), segments=250),),
+        ),
+        (_template(),),
+    )
+
+    metrics = view.metrics[0]
+    assert view.total_segments == 400
+    assert view.templated_segments == 250
+    assert metrics.share_of_all_segments == pytest.approx(0.5)
+    assert metrics.share_of_templated_segments == pytest.approx(0.8)
+
+
+def test_template_segment_shares_are_zero_without_totals() -> None:
+    view = to_analysis_view(_run(_period(30)), (_template(),))
+
+    metrics = view.metrics[0]
+    assert view.total_segments == 0
+    assert view.templated_segments == 0
+    assert metrics.share_of_all_segments == 0.0
+    assert metrics.share_of_templated_segments == 0.0
 
 
 def _statistics() -> BatchStatistics:

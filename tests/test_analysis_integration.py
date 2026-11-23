@@ -129,6 +129,10 @@ def test_full_analysis_scenario(tmp_path: Path, container) -> None:
     assert metrics.template_fee.rounded().amount == Decimal("2000.00")
     assert metrics.net_benefit.rounded().amount == Decimal("-1988.80")
     assert metrics.trigger_rate == pytest.approx(1.0)
+    assert view.total_segments == 9
+    assert view.templated_segments == 2
+    assert metrics.share_of_all_segments == pytest.approx(2 / 9)
+    assert metrics.share_of_templated_segments == pytest.approx(1.0)
     assert [(item.day, item.segments) for item in metrics.daily_segments] == [
         (date(2026, 11, 1), 2)
     ]
@@ -293,6 +297,8 @@ def test_export_report_contains_all_sheets(tmp_path: Path, container) -> None:
     headers = [cell.value for cell in workbook["Шаблоны"][1]]
     assert "Сообщений" in headers
     assert "Операторы" in headers
+    assert "% от всех сегментов" in headers
+    assert "% от шаблонированных" in headers
     assert "Без шаблона/мес, ₽" in headers
     assert "Выгода/мес, ₽" in headers
     assert "Baseline, ₽" not in headers

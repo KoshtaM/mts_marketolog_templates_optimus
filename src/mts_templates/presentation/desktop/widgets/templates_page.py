@@ -108,6 +108,25 @@ COLUMNS = (
             f"в месяц: {format_int(item.monthly_segments)}"
         ),
     ),
+    Column(
+        "% от всех",
+        lambda item: item.share_of_all_segments,
+        formatter=format_percent,
+        width=80,
+        tooltip=lambda item: (
+            "Доля сегментов сообщений, подпавших под шаблон, во всех сегментах сообщений за период"
+        ),
+    ),
+    Column(
+        "% от шабл.",
+        lambda item: item.share_of_templated_segments,
+        formatter=format_percent,
+        width=85,
+        tooltip=lambda item: (
+            "Доля сегментов сообщений, подпавших под шаблон, "
+            "в сегментах шаблонированных сообщений за период"
+        ),
+    ),
     Column("Доставлено", lambda item: item.delivered_messages, formatter=format_int, width=85),
     Column("Получателей", lambda item: item.unique_recipients, formatter=format_int, width=85),
     Column("Срабатываний", lambda item: item.triggered_messages, formatter=format_int, width=100),

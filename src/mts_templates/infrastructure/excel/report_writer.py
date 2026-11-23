@@ -156,6 +156,8 @@ class ExcelReportWriter:
             "Активен",
             "Сообщений",
             "Сегментов",
+            "% от всех сегментов",
+            "% от шаблонированных",
             "Доставлено",
             "Получателей",
             "Срабатываний",
@@ -180,6 +182,8 @@ class ExcelReportWriter:
                     "да" if metrics.active else "нет",
                     metrics.matched_messages,
                     metrics.matched_segments,
+                    metrics.share_of_all_segments,
+                    metrics.share_of_templated_segments,
                     metrics.delivered_messages,
                     metrics.unique_recipients,
                     metrics.triggered_messages,
@@ -195,8 +199,8 @@ class ExcelReportWriter:
             )
         self._style_table(
             sheet,
-            percent_columns=(11,),
-            money_columns=(13, 14, 15, 16, 17, 18),
+            percent_columns=(8, 9, 13),
+            money_columns=(15, 16, 17, 18, 19, 20),
         )
         if sheet.max_row == 1:
             sheet.append(["Нет данных: сначала импортируйте шаблоны и выполните анализ"])

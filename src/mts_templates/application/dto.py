@@ -185,6 +185,8 @@ class TemplateMetricsView:
     monthly_actual_cost: Money
     monthly_baseline_cost: Money
     monthly_net_benefit: Money
+    share_of_all_segments: float
+    share_of_templated_segments: float
     daily_segments: tuple[DaySegments, ...] = ()
 
 
@@ -350,6 +352,16 @@ class AnalysisView:
     def total_monthly_net_benefit(self) -> Money:
         """Суммарная выгода шаблонов в месяц с учётом месячной модели периода."""
         return sum((item.monthly_net_benefit for item in self.metrics), Money.zero())
+
+    @property
+    def total_segments(self) -> int:
+        """SMS-сегменты всех сообщений за период."""
+        return sum(item.segments for item in self.daily_total_segments)
+
+    @property
+    def templated_segments(self) -> int:
+        """SMS-сегменты шаблонированных сообщений за период."""
+        return sum(item.segments for item in self.daily_templated_segments)
 
 
 @dataclass(frozen=True, slots=True)
