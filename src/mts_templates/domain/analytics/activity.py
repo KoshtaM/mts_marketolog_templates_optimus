@@ -3,10 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 
 from mts_templates.domain.entities import SmsMessage
 from mts_templates.domain.value_objects import MessageClass, Money, Operator
+
+
+@dataclass(frozen=True, slots=True)
+class DaySegments:
+    """SMS-сегменты одного календарного дня."""
+
+    day: date
+    segments: int
+
+    def __post_init__(self) -> None:
+        if self.segments < 0:
+            raise ValueError("Сегменты дня не могут быть отрицательными")
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +56,10 @@ class TemplateMetrics:
     net_benefit: Money
     trigger_rate: Decimal
     active: bool
+    daily_segments: tuple[DaySegments, ...] = ()
+
+    def __post_init__(self) -> None:
+        ensure_unique_days(self.daily_segments)
 
 
 @dataclass(slots=True)
@@ -70,6 +87,7 @@ class TemplateActivity:
     baseline_cost: Money = field(default_factory=Money.zero)
     recipients: set[str] = field(default_factory=set)
     by_operator: dict[Operator, _OperatorCounts] = field(default_factory=dict)
+    daily: dict[date, int] = field(default_factory=dict)
 
     def add(self, message: SmsMessage, baseline_cost: Money, *, operator_listed: bool) -> None:
         triggered = message.message_class is MessageClass.TEMPLATED
@@ -77,6 +95,8 @@ class TemplateActivity:
         self.matched_segments += message.segments
         self.delivered_messages += int(message.delivered)
         self.recipients.add(message.recipient)
+        day = message.sent_at.date()
+        self.daily[day] = self.daily.get(day, 0) + message.segments
         if not operator_listed:
             self.off_operator_messages += 1
 
@@ -130,4 +150,15 @@ class TemplateActivity:
             net_benefit=net_benefit,
             trigger_rate=trigger_rate,
             active=active,
+            daily_segments=tuple(
+                DaySegments(day=day, segments=segments)
+                for day, segments in sorted(self.daily.items())
+            ),
         )
+
+
+def ensure_unique_days(daily: tuple[DaySegments, ...]) -> None:
+    """Проверить, что в дневном ряду каждая дата встречается один раз."""
+    days = [item.day for item in daily]
+    if len(days) != len(set(days)):
+        raise ValueError("Дневные сегменты должны быть уникальны по дате")

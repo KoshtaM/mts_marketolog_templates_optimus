@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
+from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.domain.analytics.import_aggregation import QualityIssue
 from mts_templates.domain.analytics.normalization import NormalizationPolicy
 from mts_templates.domain.entities import SmsMessage, SmsTemplate
@@ -184,6 +185,7 @@ class TemplateMetricsView:
     monthly_actual_cost: Money
     monthly_baseline_cost: Money
     monthly_net_benefit: Money
+    daily_segments: tuple[DaySegments, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -341,6 +343,8 @@ class AnalysisView:
     warnings: tuple[str, ...] = ()
     operator_triggers: tuple[OperatorTriggerView, ...] = ()
     is_partial_period: bool = False
+    daily_total_segments: tuple[DaySegments, ...] = ()
+    daily_templated_segments: tuple[DaySegments, ...] = ()
 
     @property
     def total_monthly_net_benefit(self) -> Money:

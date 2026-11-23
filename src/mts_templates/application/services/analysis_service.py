@@ -10,11 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from mts_templates.application.dto import AnalysisConfig, ImportBatch
-from mts_templates.domain.analytics.activity import TemplateActivity
+from mts_templates.domain.analytics.activity import DaySegments, TemplateActivity
 from mts_templates.domain.analytics.analysis import (
     PARTIAL_PERIOD_DAYS,
     AnalysisRun,
@@ -53,6 +53,7 @@ WARNING_NO_TEMPLATED_RATE = (
 BENEFIT_FORMULA_VERSION = 2
 SEGMENTATION_VERSION = 2
 CANDIDATE_TEXT_VERSION = 2
+DAILY_SERIES_VERSION = 1
 
 
 def compute_config_hash(
@@ -67,6 +68,7 @@ def compute_config_hash(
         "benefit_formula": BENEFIT_FORMULA_VERSION,
         "segmentation": SEGMENTATION_VERSION,
         "candidate_text": CANDIDATE_TEXT_VERSION,
+        "daily_series": DAILY_SERIES_VERSION,
         "delivered_only": config.delivered_only,
         "min_support": config.min_support,
         "min_cluster_segments": config.min_cluster_segments,
@@ -143,6 +145,8 @@ def compute_analysis(
     unmatched_templated = 0
     message_count = 0
     candidate_messages: list[SmsMessage] = []
+    daily_totals: dict[date, int] = {}
+    daily_templated: dict[date, int] = {}
 
     for index, message in enumerate(messages(), start=1):
         if should_cancel is not None and index % 1000 == 0:
@@ -150,6 +154,10 @@ def compute_analysis(
         if message.segments <= 0:
             continue
         message_count += 1
+        day = message.sent_at.date()
+        daily_totals[day] = daily_totals.get(day, 0) + message.segments
+        if message.message_class is MessageClass.TEMPLATED:
+            daily_templated[day] = daily_templated.get(day, 0) + message.segments
 
         pool = per_sender.get(
             sender_key(message.sender, case_sensitive=config.sender_case_sensitive),
@@ -227,6 +235,14 @@ def compute_analysis(
         candidates=candidates,
         warnings=tuple(warnings),
         operator_triggers=operator_triggers,
+        daily_segments=tuple(
+            DaySegments(day=day, segments=segments)
+            for day, segments in sorted(daily_totals.items())
+        ),
+        daily_templated_segments=tuple(
+            DaySegments(day=day, segments=segments)
+            for day, segments in sorted(daily_templated.items())
+        ),
     )
 
 

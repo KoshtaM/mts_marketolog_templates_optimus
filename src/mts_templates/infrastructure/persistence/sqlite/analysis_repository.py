@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from mts_templates.domain.analytics.activity import OperatorTrigger, TemplateMetrics
+from mts_templates.domain.analytics.activity import DaySegments, OperatorTrigger, TemplateMetrics
 from mts_templates.domain.analytics.analysis import AnalysisRun, CandidateGroup
 from mts_templates.domain.value_objects import Operator, Period
 from mts_templates.infrastructure.persistence.sqlite.database import Database
@@ -83,6 +83,15 @@ class SqliteAnalysisRepository:
                                     }
                                     for item in run.operator_triggers
                                 ],
+                                "daily_segments": _daily_payload(run.daily_segments),
+                                "daily_templated_segments": _daily_payload(
+                                    run.daily_templated_segments
+                                ),
+                                "template_daily_segments": {
+                                    metrics.template_id: _daily_payload(metrics.daily_segments)
+                                    for metrics in run.metrics
+                                    if metrics.daily_segments
+                                },
                             },
                             ensure_ascii=False,
                         ),
@@ -170,7 +179,11 @@ class SqliteAnalysisRepository:
             end=datetime.fromisoformat(str(payload["period_to"])),
         )
         run_id = str(row["id"])
-        metrics = tuple(self._load_metrics(run_id))
+        template_daily = {
+            str(template_id): _day_segments(items)
+            for template_id, items in dict(payload.get("template_daily_segments", {})).items()
+        }
+        metrics = tuple(self._load_metrics(run_id, template_daily))
         candidates = tuple(self._load_candidates(run_id, period))
         return AnalysisRun(
             run_id=run_id,
@@ -186,9 +199,15 @@ class SqliteAnalysisRepository:
             operator_triggers=tuple(
                 _operator_trigger(item) for item in payload.get("operator_triggers", [])
             ),
+            daily_segments=_day_segments(payload.get("daily_segments", [])),
+            daily_templated_segments=_day_segments(payload.get("daily_templated_segments", [])),
         )
 
-    def _load_metrics(self, run_id: str) -> list[TemplateMetrics]:
+    def _load_metrics(
+        self,
+        run_id: str,
+        template_daily: dict[str, tuple[DaySegments, ...]],
+    ) -> list[TemplateMetrics]:
         rows = self._database.fetchall(
             """
             SELECT template_id, active, matched_messages, matched_segments,
@@ -216,6 +235,7 @@ class SqliteAnalysisRepository:
                 off_operator_messages=int(row["off_operator_messages"]),
                 trigger_rate=Decimal(str(row["trigger_rate"])),
                 active=bool(row["active"]),
+                daily_segments=template_daily.get(str(row["template_id"]), ()),
             )
             for row in rows
         ]
@@ -266,6 +286,25 @@ class SqliteAnalysisRepository:
             )
             for row in rows
         ]
+
+
+def _daily_payload(daily: tuple[DaySegments, ...]) -> list[dict[str, object]]:
+    """Дневной ряд для JSON: только дни с сегментами, по возрастанию даты."""
+    return [
+        {"day": item.day.isoformat(), "segments": item.segments}
+        for item in daily
+        if item.segments > 0
+    ]
+
+
+def _day_segments(items: Any) -> tuple[DaySegments, ...]:
+    return tuple(
+        DaySegments(
+            day=date.fromisoformat(str(item["day"])),
+            segments=int(item["segments"]),
+        )
+        for item in items
+    )
 
 
 def _operator_trigger(item: dict[str, Any]) -> OperatorTrigger:

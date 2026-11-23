@@ -57,6 +57,7 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
             monthly_actual_cost=item.actual_cost * factor,
             monthly_baseline_cost=item.baseline_cost * factor,
             monthly_net_benefit=monthly_net_benefit(item, factor),
+            daily_segments=item.daily_segments,
         )
         for item in run.metrics
     )
@@ -110,6 +111,8 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
         warnings=run.warnings,
         operator_triggers=operator_triggers,
         is_partial_period=run.period.days < PARTIAL_PERIOD_DAYS,
+        daily_total_segments=run.daily_segments,
+        daily_templated_segments=run.daily_templated_segments,
     )
 
 

@@ -26,15 +26,37 @@ Y_LABEL_GAP = 8.0
 Y_LABEL_HEIGHT = 16.0
 PLOT_TOP_GAP = 8.0
 BAR_GAP = 2.0
+BAR_GAP_RATIO = 0.2
 MIN_BAR_WIDTH = 3.0
-MAX_BAR_WIDTH = 46.0
+MIN_OVERLAY_HEIGHT = 2.0
 MIN_PLOT_HEIGHT = 60.0
 EMPTY_TEXT = "Нет данных"
 
 
 def bar_width_for_slot(slot: float) -> float:
-    """Ширина столбца: зазор между столбцами минимальный, но заметный."""
-    return min(max(slot - BAR_GAP, MIN_BAR_WIDTH), MAX_BAR_WIDTH, slot)
+    """Ширина столбца: зазор 20 % слота, но не меньше 2 px."""
+    gap = max(slot * BAR_GAP_RATIO, BAR_GAP)
+    return min(max(slot - gap, MIN_BAR_WIDTH), slot)
+
+
+def overlay_geometry(
+    bar_height: float,
+    value_height: float,
+    offset_ratio: float,
+) -> tuple[float, float] | None:
+    """Смещение от основания и высота накладки внутри столбца.
+
+    Накладка начинается на `offset_ratio` высоты столбца, не выходит за его
+    верх и остаётся видимой даже при малом значении. `None` — рисовать нечего.
+    """
+    if bar_height <= 0 or value_height <= 0:
+        return None
+    offset = bar_height * max(offset_ratio, 0.0)
+    available = bar_height - offset
+    if available <= 0:
+        return None
+    height = min(max(value_height, MIN_OVERLAY_HEIGHT), available)
+    return offset, height
 
 
 class StackedBarChart(QWidget):
@@ -44,13 +66,19 @@ class StackedBarChart(QWidget):
     задаются вызывающим кодом, чтобы совпадать с круговыми диаграммами.
     """
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        parent: QWidget | None = None,
+        *,
+        compact: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._title = title
         self._caption = ""
         self._bars: tuple[StackedBar, ...] = ()
         self._legend: tuple[tuple[str, str], ...] = ()
-        self.setMinimumSize(320, 240)
+        self.setMinimumSize(320, 150 if compact else 240)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_data(
@@ -220,6 +248,32 @@ class StackedBarChart(QWidget):
                 painter.setBrush(QColor(segment.color))
                 painter.drawRect(rect)
                 cumulative += height
+            self._draw_overlays(painter, chart, bar, x, bar_width, cumulative, top, separator)
+
+    def _draw_overlays(
+        self,
+        painter: QPainter,
+        chart: QRectF,
+        bar: StackedBar,
+        x: float,
+        bar_width: float,
+        bar_height: float,
+        top: int,
+        separator: QPen,
+    ) -> None:
+        """Накладки внутри основного столбца: смещение от основания и высота."""
+        if not bar.overlays or top <= 0:
+            return
+        for overlay in bar.overlays:
+            value_height = (overlay.value / top) * chart.height()
+            geometry = overlay_geometry(bar_height, value_height, overlay.offset_ratio)
+            if geometry is None:
+                continue
+            offset, height = geometry
+            rect = QRectF(x, chart.bottom() - offset - height, bar_width, height)
+            painter.setPen(separator)
+            painter.setBrush(QColor(overlay.color))
+            painter.drawRect(rect)
 
     def _draw_day_labels(self, painter: QPainter, chart: QRectF, metrics: QFontMetrics) -> None:
         """Подписи дней под осью X; при тесноте — через несколько дней."""

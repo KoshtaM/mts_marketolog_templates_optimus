@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -34,6 +36,7 @@ from mts_templates.application.use_cases.dashboard import (
     negative_benefit,
     positive_benefit,
 )
+from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.benefit_style import (
     RowPalette,
@@ -41,6 +44,7 @@ from mts_templates.presentation.desktop.benefit_style import (
     row_palette,
     semantic_text,
 )
+from mts_templates.presentation.desktop.daily_chart import build_template_daily_chart
 from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
     format_int,
@@ -55,9 +59,11 @@ from mts_templates.presentation.desktop.table_filters import operator_rows_for_t
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
+from mts_templates.presentation.desktop.widgets.stacked_bar_chart import StackedBarChart
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 OPERATOR_TITLE = "Срабатывание по операторам получателя"
+TEMPLATE_CHART_TITLE = "Сегменты по дням"
 SUMMARY_MIN_WIDTH = 240
 
 
@@ -160,6 +166,10 @@ class TemplatesPage(QWidget):
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
         self._operator_triggers: tuple[OperatorTriggerView, ...] = ()
+        self._daily_total: tuple[DaySegments, ...] = ()
+        self._daily_templated: tuple[DaySegments, ...] = ()
+        self._selected_metric: TemplateMetricsView | None = None
+        self._period_days: tuple[date, date] | None = None
         self._row_palette = _theme_row_palette()
 
         self._batch_combo = QComboBox(self)
@@ -182,6 +192,12 @@ class TemplatesPage(QWidget):
         self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
         self._operator_title.setWordWrap(True)
+        self._templated_only = QCheckBox("Только шаблонированные", self)
+        self._templated_only.setToolTip(
+            "Сопоставлять сегменты шаблона с шаблонированным трафиком дня, а не со всем трафиком"
+        )
+        self._daily_chart = StackedBarChart(TEMPLATE_CHART_TITLE, self, compact=True)
+        self._daily_chart.setMaximumHeight(210)
         self._busy = BusyOverlay(self._table)
 
         self._build()
@@ -211,6 +227,7 @@ class TemplatesPage(QWidget):
         self._recalc_button.clicked.connect(lambda: self._analyze(force=True))
         self._filter.textChanged.connect(self._apply_filter)
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
+        self._templated_only.toggled.connect(self._templated_only_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
         self._show_operator_rows(None)
@@ -246,6 +263,8 @@ class TemplatesPage(QWidget):
             totals.addWidget(total, stretch=1)
         right_layout.addLayout(totals)
         right_layout.addWidget(self._summary)
+        right_layout.addWidget(self._templated_only)
+        right_layout.addWidget(self._daily_chart)
         right_layout.addWidget(self._warnings)
         right_layout.addStretch(1)
 
@@ -289,6 +308,11 @@ class TemplatesPage(QWidget):
             self._warnings.setPlainText("")
             self._model.set_rows(())
             self._operator_triggers = ()
+            self._daily_total = ()
+            self._daily_templated = ()
+            self._selected_metric = None
+            self._period_days = None
+            self._daily_chart.set_data(())
             self._show_operator_rows(None)
             self._reset_totals()
 
@@ -307,6 +331,7 @@ class TemplatesPage(QWidget):
         self._busy.refresh_theme()
         self._model.refresh()
         self._operator_model.refresh()
+        self._daily_chart.update()
         rows = self._model.rows()
         if rows:
             self._fill_totals(rows)
@@ -316,6 +341,11 @@ class TemplatesPage(QWidget):
     def _batch_changed(self, _index: int) -> None:
         self._model.set_rows(())
         self._operator_triggers = ()
+        self._daily_total = ()
+        self._daily_templated = ()
+        self._selected_metric = None
+        self._period_days = None
+        self._daily_chart.set_data(())
         self._show_operator_rows(None)
         self._summary.setText("Нажмите «Выполнить анализ», чтобы посчитать метрики.")
         self._reset_totals()
@@ -353,6 +383,9 @@ class TemplatesPage(QWidget):
             summary += " · неполный период: денежные суммы и объёмы смоделированы на 30 дней"
         self._summary.setText(summary)
         self._fill_totals(view.metrics)
+        self._daily_total = view.daily_total_segments
+        self._daily_templated = view.daily_templated_segments
+        self._period_days = (view.period_from.date(), view.period_to.date())
         lines = list(view.warnings)
         if not lines:
             lines.append("Предупреждений нет.")
@@ -411,24 +444,49 @@ class TemplatesPage(QWidget):
         self._show_operator_rows(self._model.row_at(index.row()).template_id)
 
     def _show_operator_rows(self, template_id: str | None) -> None:
-        """Показать операторов только для выделенного шаблона."""
+        """Показать операторов и дневной график только для выделенного шаблона."""
+        metric = (
+            next(
+                (item for item in self._model.rows() if item.template_id == template_id),
+                None,
+            )
+            if template_id is not None
+            else None
+        )
         self._operator_model.set_rows(
             operator_rows_for_template(template_id, self._operator_triggers)
         )
         fit_columns(self._operator_table)
         self._fit_operator_width()
-        if template_id is None:
+        self._update_daily_chart(metric)
+        if metric is None:
             self._operator_title.setText(OPERATOR_TITLE)
             return
-        metric = next(
-            (item for item in self._model.rows() if item.template_id == template_id),
-            None,
-        )
         self._operator_title.setText(
             f"{OPERATOR_TITLE} — {metric.name} ({format_operators(metric.operators)})"
-            if metric is not None
-            else OPERATOR_TITLE
         )
+
+    def _update_daily_chart(self, metric: TemplateMetricsView | None) -> None:
+        """Пересобрать дневной график: совпавшие сегменты внутри базового трафика."""
+        self._selected_metric = metric
+        if metric is None or self._period_days is None:
+            self._daily_chart.set_data(())
+            return
+        templated_only = self._templated_only.isChecked()
+        totals = self._daily_templated if templated_only else self._daily_total
+        start, end = self._period_days
+        data = build_template_daily_chart(
+            totals,
+            metric.daily_segments,
+            period_start=start,
+            period_end=end,
+            templated_only=templated_only,
+        )
+        self._daily_chart.set_data(data.bars, legend=data.legend, caption=data.caption)
+
+    def _templated_only_changed(self, _checked: bool) -> None:
+        """Переключить базовый ряд графика без повторного анализа."""
+        self._update_daily_chart(self._selected_metric)
 
     def _apply_filter(self, text: str) -> None:
         self._proxy.setFilterFixedString(text)

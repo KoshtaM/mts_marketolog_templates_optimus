@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -128,6 +129,21 @@ def test_full_analysis_scenario(tmp_path: Path, container) -> None:
     assert metrics.template_fee.rounded().amount == Decimal("2000.00")
     assert metrics.net_benefit.rounded().amount == Decimal("-1988.80")
     assert metrics.trigger_rate == pytest.approx(1.0)
+    assert [(item.day, item.segments) for item in metrics.daily_segments] == [
+        (date(2026, 11, 1), 2)
+    ]
+    assert [(item.day, item.segments) for item in view.daily_total_segments] == [
+        (date(2026, 11, 1), 3),
+        (date(2026, 11, 2), 1),
+        (date(2026, 11, 6), 1),
+        (date(2026, 11, 11), 1),
+        (date(2026, 11, 16), 1),
+        (date(2026, 11, 21), 1),
+        (date(2026, 11, 30), 1),
+    ]
+    assert [(item.day, item.segments) for item in view.daily_templated_segments] == [
+        (date(2026, 11, 1), 2)
+    ]
 
     assert len(view.candidates) == 1
     candidate = view.candidates[0]
@@ -159,6 +175,9 @@ def test_analysis_is_cached(tmp_path: Path, container) -> None:
     second = container.analyze_templates.execute(AnalyzeRequest(batch_id=batch_id))
 
     assert first.run_id == second.run_id
+    assert first.daily_total_segments == second.daily_total_segments
+    assert first.daily_templated_segments == second.daily_templated_segments
+    assert first.metrics[0].daily_segments == second.metrics[0].daily_segments
     assert container.database.fetchone("SELECT COUNT(*) AS c FROM analysis_runs")["c"] == 1
 
 

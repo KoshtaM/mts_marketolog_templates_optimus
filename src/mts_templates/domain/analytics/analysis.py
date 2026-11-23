@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from mts_templates.domain.analytics.activity import OperatorTrigger, TemplateMetrics
+from mts_templates.domain.analytics.activity import (
+    DaySegments,
+    OperatorTrigger,
+    TemplateMetrics,
+    ensure_unique_days,
+)
 from mts_templates.domain.value_objects import Money, Operator, Period
 
 DAYS_IN_MONTH = Decimal("30")
@@ -89,6 +94,8 @@ class AnalysisRun:
     candidates: tuple[CandidateGroup, ...]
     warnings: tuple[str, ...] = ()
     operator_triggers: tuple[OperatorTrigger, ...] = ()
+    daily_segments: tuple[DaySegments, ...] = ()
+    daily_templated_segments: tuple[DaySegments, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -101,12 +108,23 @@ class AnalysisRun:
             raise ValueError("Счётчики сообщений не могут быть отрицательными")
         if self.matched_message_count > self.message_count:
             raise ValueError("Сопоставленных сообщений больше, чем всего")
+        ensure_unique_days(self.daily_segments)
+        ensure_unique_days(self.daily_templated_segments)
         template_ids = [metrics.template_id for metrics in self.metrics]
         if len(template_ids) != len(set(template_ids)):
             raise ValueError("Метрики должны быть уникальны по template_id")
         candidate_ids = [candidate.candidate_id for candidate in self.candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("Кандидаты должны быть уникальны по candidate_id")
+        totals = {item.day: item.segments for item in self.daily_segments}
+        templated_totals = {item.day: item.segments for item in self.daily_templated_segments}
+        for day, segments in templated_totals.items():
+            if segments > totals.get(day, 0):
+                raise ValueError("Шаблонированных сегментов дня больше, чем всего трафика дня")
+        for metrics in self.metrics:
+            for item in metrics.daily_segments:
+                if item.segments > totals.get(item.day, 0):
+                    raise ValueError("Сегменты шаблона по дням не могут превышать трафик дня")
 
     @property
     def total_net_benefit(self) -> Money:
