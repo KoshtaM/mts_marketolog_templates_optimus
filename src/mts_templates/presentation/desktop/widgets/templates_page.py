@@ -54,7 +54,11 @@ from mts_templates.presentation.desktop.formatting import (
     format_period,
 )
 from mts_templates.presentation.desktop.models.table_model import Column, RowsTableModel
-from mts_templates.presentation.desktop.models.table_view import build_table, fit_columns
+from mts_templates.presentation.desktop.models.table_view import (
+    build_table,
+    fit_columns,
+    sort_by_title,
+)
 from mts_templates.presentation.desktop.table_filters import operator_rows_for_template
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
@@ -218,6 +222,7 @@ class TemplatesPage(QWidget):
         self._warnings.setMaximumHeight(180)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
         self._table, self._proxy = build_table(self._model, self, stretch_column=0)
+        sort_by_title(self._table, "Выгода/мес", Qt.SortOrder.DescendingOrder)
         self._operator_model = RowsTableModel(
             OPERATOR_COLUMNS, self, row_color=self._operator_row_color
         )

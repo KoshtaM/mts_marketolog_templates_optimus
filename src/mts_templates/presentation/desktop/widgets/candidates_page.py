@@ -51,6 +51,7 @@ from mts_templates.presentation.desktop.models.table_view import (
     MIN_STRETCH_WIDTH,
     build_table,
     fit_columns,
+    sort_by_title,
 )
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import (
@@ -170,6 +171,7 @@ class CandidatesPage(QWidget):
             stretch_column=0,
             min_stretch_width=CANDIDATE_STRETCH_WIDTH,
         )
+        sort_by_title(self._table, "Выгода/мес", Qt.SortOrder.DescendingOrder)
         self._profit_total = BenefitTotal("Выгода в месяц от внедрения выгодных кандидатов", self)
         self._dashboard = SegmentDashboard(
             CANDIDATE_DASHBOARD_TILES,

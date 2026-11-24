@@ -160,3 +160,15 @@ def fit_columns(
 ) -> None:
     """Подогнать ширину колонок под содержимое, не давая им разрастаться."""
     view.fit_to_contents(max_widths=max_widths)
+
+
+def sort_by_title(view: RowsTableView, title: str, order: Qt.SortOrder) -> None:
+    """Задать сортировку по заголовку колонки и показать индикатор в шапке."""
+    model = view.model()
+    if model is None:
+        raise ValueError("У таблицы нет модели")
+    for index in range(model.columnCount()):
+        if model.headerData(index, Qt.Orientation.Horizontal) == title:
+            view.horizontalHeader().setSortIndicator(index, order)
+            return
+    raise ValueError(f"Колонка {title!r} не найдена")
