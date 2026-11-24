@@ -24,6 +24,7 @@ from mts_templates.application.dto import (
     AnalysisView,
     AnalyzeRequest,
     ImportBatch,
+    MatchedMessageView,
     OperatorTriggerView,
     TemplateMetricsView,
 )
@@ -34,12 +35,16 @@ from mts_templates.application.use_cases.dashboard import (
     negative_benefit,
     positive_benefit,
 )
+from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.benefit_style import (
     RowPalette,
     benefit_color,
     row_palette,
     semantic_text,
+)
+from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import (
+    MatchedMessagesDialog,
 )
 from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
@@ -55,6 +60,7 @@ from mts_templates.presentation.desktop.table_filters import operator_rows_for_t
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
+from mts_templates.presentation.desktop.widgets.cell_button import CellButtonDelegate
 from mts_templates.presentation.desktop.widgets.segment_dashboard import (
     DashboardSeries,
     DashboardTile,
@@ -69,6 +75,7 @@ SUMMARY_STRETCH = 2
 TABLE_STRETCH = 4
 LOWER_STRETCH = 3
 SPLIT_WEIGHT_SCALE = 1000
+MESSAGES_BUTTON_TOOLTIP = "Показать сообщения, подпавшие под шаблон"
 TEMPLATE_DASHBOARD_TILES = (
     "% от всех сегментов",
     "% от шаблонированных",
@@ -90,6 +97,7 @@ COLUMNS = (
         width=300,
         tooltip=lambda item: item.text,
     ),
+    Column("⋯", lambda _item: "", width=34, tooltip=lambda _item: MESSAGES_BUTTON_TOOLTIP),
     Column(
         "Операторы",
         lambda item: format_operators(item.operators),
@@ -183,6 +191,7 @@ class TemplatesPage(QWidget):
         self,
         *,
         analyze_templates: AnalyzeTemplates,
+        matched_messages: ListMatchedMessages,
         list_batches: ListBatches,
         settings_provider: Callable[[], AppSettings],
         runner: BackgroundRunner,
@@ -190,10 +199,13 @@ class TemplatesPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._analyze_templates = analyze_templates
+        self._matched_messages = matched_messages
         self._list_batches = list_batches
         self._settings_provider = settings_provider
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
+        self._batch_id: str | None = None
+        self._messages_dialog: MatchedMessagesDialog | None = None
         self._operator_triggers: tuple[OperatorTriggerView, ...] = ()
         self._row_palette = _theme_row_palette()
 
@@ -208,6 +220,8 @@ class TemplatesPage(QWidget):
         self._warnings.setMaximumHeight(180)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
         self._table, self._proxy = build_table(self._model, self, stretch_column=0)
+        self._messages_button = CellButtonDelegate("⋯", self)
+        self._table.setItemDelegateForColumn(1, self._messages_button)
         self._operator_model = RowsTableModel(
             OPERATOR_COLUMNS, self, row_color=self._operator_row_color
         )
@@ -256,6 +270,7 @@ class TemplatesPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
+        self._messages_button.clicked.connect(self._show_template_messages)
         self._show_operator_rows(None)
 
     def _build_operator_section(self) -> QWidget:
@@ -369,6 +384,7 @@ class TemplatesPage(QWidget):
 
     def _batch_changed(self, _index: int) -> None:
         self._model.set_rows(())
+        self._batch_id = None
         self._operator_triggers = ()
         self._dashboard.clear()
         self._show_operator_rows(None)
@@ -392,6 +408,7 @@ class TemplatesPage(QWidget):
 
     def _show(self, view: AnalysisView) -> None:
         self._set_busy(False)
+        self._batch_id = view.batch_id
         self._operator_triggers = view.operator_triggers
         self._model.set_rows(view.metrics)
         self._apply_filter(self._filter.text())
@@ -462,6 +479,36 @@ class TemplatesPage(QWidget):
             title=f"Текст шаблона · {metric.template_id}",
             parent=self,
         ).exec()
+
+    def _show_template_messages(self, index: QModelIndex) -> None:
+        """Кнопка справа от текста шаблона открывает список подпавших сообщений."""
+        source = self._proxy.mapToSource(index)
+        if not source.isValid() or not self._batch_id:
+            return
+        metric = self._model.row_at(source.row())
+        batch_id = self._batch_id
+        self._set_busy(True, "Загрузка сообщений…")
+        self._runner.run(
+            lambda token: self._matched_messages.for_template(
+                batch_id,
+                metric.template_id,
+                should_cancel=lambda: token.cancelled,
+            ),
+            on_success=lambda rows: self._open_messages_dialog(rows, metric.template_id),
+            on_error=self._messages_failed,
+        )
+
+    def _open_messages_dialog(self, rows: tuple[MatchedMessageView, ...], template_id: str) -> None:
+        self._set_busy(False)
+        if self._messages_dialog is None:
+            self._messages_dialog = MatchedMessagesDialog(self)
+        self._messages_dialog.set_rows(rows, title=f"Сообщения шаблона · ID {template_id}")
+        self._messages_dialog.show()
+        self._messages_dialog.raise_()
+
+    def _messages_failed(self, message: str) -> None:
+        self._set_busy(False)
+        QMessageBox.critical(self, "Ошибка загрузки сообщений", message)
 
     def _selection_changed(self, current: QModelIndex, _previous: QModelIndex) -> None:
         index = self._proxy.mapToSource(current)

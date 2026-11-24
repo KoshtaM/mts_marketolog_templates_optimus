@@ -28,6 +28,7 @@ def make_row(
     recipient: str = "79000000000",
     delivered: bool = True,
     send_status: str = "Отправлено",
+    delivery_status: str = "Успешная доставка",
 ) -> RawSmsRow:
     return RawSmsRow(
         message_id=message_id,
@@ -42,6 +43,7 @@ def make_row(
         package_type=package_type,
         delivered=delivered,
         send_status=send_status,
+        delivery_status=delivery_status,
     )
 
 
@@ -68,6 +70,18 @@ def test_duplicate_rows_sum_cost_and_segments() -> None:
     assert len(message.billing_rows) == 2
     assert result.duplicate_message_ids == 1
     assert [issue.field for issue in result.issues] == ["segments"]
+
+
+def test_statuses_take_first_non_empty_value_in_billing_group() -> None:
+    rows = [
+        make_row("A", send_status="", delivery_status=""),
+        make_row("A", send_status="Отправлено", delivery_status="Ошибка доставки"),
+    ]
+
+    message = aggregate_rows(rows).messages[0]
+
+    assert message.send_status == "Отправлено"
+    assert message.delivery_status == "Ошибка доставки"
 
 
 def test_rows_without_cost_do_not_break_total() -> None:

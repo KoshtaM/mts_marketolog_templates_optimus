@@ -28,8 +28,11 @@ from mts_templates.domain.analytics.csg import (
     build_signature_groups,
     extract_candidates,
 )
-from mts_templates.domain.analytics.matching import compile_templates, match_message
-from mts_templates.domain.analytics.normalization import sender_key
+from mts_templates.domain.analytics.matching import (
+    compile_templates,
+    is_candidate_message,
+    resolve_template,
+)
 from mts_templates.domain.entities import SmsMessage, SmsTemplate
 from mts_templates.domain.errors import OperationCancelled, TariffError
 from mts_templates.domain.tariffs.models import (
@@ -133,8 +136,6 @@ def compute_analysis(
         policy,
         sender_case_sensitive=config.sender_case_sensitive,
     )
-    wildcard = compiled.get("", ())
-    per_sender = {sender: items + wildcard for sender, items in compiled.items() if sender}
 
     activities = {
         template.template_id: TemplateActivity(template.template_id) for template in templates
@@ -159,14 +160,11 @@ def compute_analysis(
         if message.message_class is MessageClass.TEMPLATED:
             daily_templated[day] = daily_templated.get(day, 0) + message.segments
 
-        pool = per_sender.get(
-            sender_key(message.sender, case_sensitive=config.sender_case_sensitive),
-            wildcard,
-        )
-        template = (
-            match_message(message.text, pool, message.operator, policy)
-            if pool and message.text.strip()
-            else None
+        template = resolve_template(
+            message,
+            compiled,
+            policy,
+            sender_case_sensitive=config.sender_case_sensitive,
         )
         if template is not None:
             matched_message_count += 1
@@ -182,7 +180,7 @@ def compute_analysis(
 
         if message.message_class is MessageClass.TEMPLATED:
             unmatched_templated += 1
-        if _is_candidate(message, config):
+        if is_candidate_message(message, delivered_only=config.delivered_only):
             candidate_messages.append(message)
 
     metrics = tuple(
@@ -357,14 +355,6 @@ def _candidate_daily_segments(messages: Sequence[SmsMessage]) -> tuple[DaySegmen
 def _candidate_id(sender_key_value: str, template_text: str) -> str:
     digest = hashlib.sha256(f"{sender_key_value}\x1f{template_text}".encode()).hexdigest()
     return digest[:12]
-
-
-def _is_candidate(message: SmsMessage, config: AnalysisConfig) -> bool:
-    if message.message_class is not MessageClass.ORDINARY:
-        return False
-    if not message.text.strip():
-        return False
-    return not (config.delivered_only and not message.delivered)
 
 
 def _baseline_provider(

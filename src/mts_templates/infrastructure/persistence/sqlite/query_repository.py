@@ -22,7 +22,7 @@ from mts_templates.infrastructure.persistence.sqlite.repositories import kopecks
 
 _MESSAGE_COLUMNS = (
     "id, sent_at, recipient, operator, sender, text, segments, message_class, "
-    "cost_kopecks, delivered"
+    "cost_kopecks, delivered, send_status, delivery_status"
 )
 
 
@@ -254,6 +254,8 @@ def _row_to_message(row: sqlite3.Row) -> SmsMessage:
         message_class=MessageClass(str(row["message_class"])),
         cost=kopecks_to_money(int(row["cost_kopecks"])),
         delivered=bool(row["delivered"]),
+        send_status=str(row["send_status"] or ""),
+        delivery_status=str(row["delivery_status"] or ""),
     )
 
 

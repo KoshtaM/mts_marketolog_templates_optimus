@@ -21,15 +21,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mts_templates.application.dto import AnalysisView, CandidateView, ImportBatch
+from mts_templates.application.dto import (
+    AnalysisView,
+    CandidateView,
+    ImportBatch,
+    MatchedMessageView,
+)
 from mts_templates.application.settings import AppSettings, BenefitThresholds
 from mts_templates.application.use_cases.dashboard import ListBatches, positive_benefit
 from mts_templates.application.use_cases.find_candidates import FindCandidates
+from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
 from mts_templates.presentation.desktop.benefit_style import (
     RowPalette,
     benefit_color,
     row_palette,
     semantic_text,
+)
+from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import (
+    MatchedMessagesDialog,
 )
 from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
@@ -50,6 +59,7 @@ from mts_templates.presentation.desktop.widgets.benefit_totals import (
     neutral_color,
 )
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
+from mts_templates.presentation.desktop.widgets.cell_button import CellButtonDelegate
 from mts_templates.presentation.desktop.widgets.segment_dashboard import (
     DashboardSeries,
     DashboardTile,
@@ -72,10 +82,12 @@ def _status_title(status: str) -> str:
 # Текст шаблона-кандидата должен занимать вдвое больше места, чем по умолчанию.
 CANDIDATE_TEXT_WIDTH = 600
 CANDIDATE_STRETCH_WIDTH = MIN_STRETCH_WIDTH * 2
+MESSAGES_BUTTON_TOOLTIP = "Показать сообщения, из которых собран кандидат"
 
 
 COLUMNS = (
     Column("Шаблон-кандидат", lambda item: item.template_text, width=CANDIDATE_TEXT_WIDTH),
+    Column("⋯", lambda _item: "", width=34, tooltip=lambda _item: MESSAGES_BUTTON_TOOLTIP),
     Column("Статус", lambda item: item.status, formatter=_status_title, width=150),
     Column("Сообщений", lambda item: item.messages, formatter=format_int, width=80),
     Column("Сегментов", lambda item: item.segments, formatter=format_int, width=80),
@@ -123,6 +135,7 @@ class CandidatesPage(QWidget):
         self,
         *,
         find_candidates: FindCandidates,
+        matched_messages: ListMatchedMessages,
         list_batches: ListBatches,
         settings_provider: Callable[[], AppSettings],
         runner: BackgroundRunner,
@@ -130,10 +143,13 @@ class CandidatesPage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._find_candidates = find_candidates
+        self._matched_messages = matched_messages
         self._list_batches = list_batches
         self._settings_provider = settings_provider
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
+        self._batch_id: str | None = None
+        self._messages_dialog: MatchedMessagesDialog | None = None
         self._candidates: tuple[CandidateView, ...] = ()
         self._row_palette = _theme_row_palette()
 
@@ -152,6 +168,8 @@ class CandidatesPage(QWidget):
             stretch_column=0,
             min_stretch_width=CANDIDATE_STRETCH_WIDTH,
         )
+        self._messages_button = CellButtonDelegate("⋯", self)
+        self._table.setItemDelegateForColumn(1, self._messages_button)
         self._profit_total = BenefitTotal("Выгода в месяц от внедрения выгодных кандидатов", self)
         self._dashboard = SegmentDashboard(
             CANDIDATE_DASHBOARD_TILES,
@@ -190,6 +208,7 @@ class CandidatesPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
+        self._messages_button.clicked.connect(self._show_candidate_messages)
 
     def _build_lower_section(self) -> QWidget:
         """Слева — выгода и описание кандидата, справа — его мини-дашборд."""
@@ -242,6 +261,7 @@ class CandidatesPage(QWidget):
 
     def _batch_changed(self, _index: int) -> None:
         self._candidates = ()
+        self._batch_id = None
         self._model.set_rows(())
         self._details.setPlainText("")
         self._profit_total.reset()
@@ -287,6 +307,7 @@ class CandidatesPage(QWidget):
 
     def _show(self, view: AnalysisView) -> None:
         self._set_busy(False)
+        self._batch_id = view.batch_id
         candidates = view.candidates
         self._candidates = candidates
         self._model.set_rows(candidates)
@@ -347,6 +368,38 @@ class CandidatesPage(QWidget):
             title=f"Текст шаблона-кандидата · {candidate.candidate_id}",
             parent=self,
         ).exec()
+
+    def _show_candidate_messages(self, index: QModelIndex) -> None:
+        """Кнопка справа от текста кандидата открывает список его сообщений."""
+        source = self._proxy.mapToSource(index)
+        if not source.isValid() or not self._batch_id:
+            return
+        candidate = self._model.row_at(source.row())
+        batch_id = self._batch_id
+        self._set_busy(True, "Загрузка сообщений…")
+        self._runner.run(
+            lambda token: self._matched_messages.for_candidate(
+                batch_id,
+                candidate,
+                should_cancel=lambda: token.cancelled,
+            ),
+            on_success=lambda rows: self._open_messages_dialog(rows, candidate.candidate_id),
+            on_error=self._messages_failed,
+        )
+
+    def _open_messages_dialog(
+        self, rows: tuple[MatchedMessageView, ...], candidate_id: str
+    ) -> None:
+        self._set_busy(False)
+        if self._messages_dialog is None:
+            self._messages_dialog = MatchedMessagesDialog(self)
+        self._messages_dialog.set_rows(rows, title=f"Сообщения кандидата · ID {candidate_id}")
+        self._messages_dialog.show()
+        self._messages_dialog.raise_()
+
+    def _messages_failed(self, message: str) -> None:
+        self._set_busy(False)
+        QMessageBox.critical(self, "Ошибка загрузки сообщений", message)
 
     def _selection_changed(self, current: object, _previous: object) -> None:
         index = self._proxy.mapToSource(current)  # type: ignore[arg-type]

@@ -39,6 +39,8 @@ class SmsMessage:
     cost: Money
     delivered: bool
     billing_rows: tuple[BillingRow, ...] = ()
+    send_status: str = ""
+    delivery_status: str = ""
 
     def __post_init__(self) -> None:
         if not self.message_id:

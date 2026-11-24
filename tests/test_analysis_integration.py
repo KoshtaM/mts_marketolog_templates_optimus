@@ -345,6 +345,72 @@ def test_template_import_invalidates_analysis_cache(tmp_path: Path, container) -
     assert second.run_id != first.run_id
 
 
+def test_list_matched_messages_for_template(tmp_path: Path, container) -> None:
+    rows = statistics_rows()
+    rows[1] = {
+        **rows[1],
+        "Номер получателя": "79000001234",
+        "Статус доставки СМС или ММС": "Ошибка доставки",
+    }
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", rows)
+    templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
+    import_report = container.import_statistics.execute(ImportStatisticsRequest(path=statistics))
+    container.import_templates.execute(ImportTemplatesRequest(path=templates))
+    view = container.analyze_templates.execute(AnalyzeRequest(batch_id=import_report.batch.id))
+
+    messages = container.matched_messages.for_template(view.batch_id, view.metrics[0].template_id)
+
+    assert [item.message_id for item in messages] == ["T0", "T1"]
+    assert [item.text for item in messages] == ["Ваш код 1111", "Ваш код 2222"]
+    assert [item.segments for item in messages] == [1, 1]
+    assert [item.masked_recipient for item in messages] == ["79*****0000", "79*****1234"]
+    assert [item.operator for item in messages] == ["MTS", "MTS"]
+    assert [item.delivery_status for item in messages] == [
+        "Успешная доставка",
+        "Ошибка доставки",
+    ]
+    assert [item.sent_at.isoformat() for item in messages] == [
+        "2026-11-01T10:00:00+03:00",
+        "2026-11-01T10:00:00+03:00",
+    ]
+
+
+def test_list_matched_messages_for_candidate(tmp_path: Path, container) -> None:
+    rows = statistics_rows()
+    rows.append(
+        {
+            **rows[2],
+            "ID сообщения": "X1",
+            "Имя отправителя": "OTHER",
+            "Текст сообщения": "Заказ 9999 готов к выдаче",
+            "Дата попытки отправки": "2026-11-03T10:00:00+03:00",
+        }
+    )
+    rows.append(
+        {
+            **rows[2],
+            "ID сообщения": "X2",
+            "Текст сообщения": "Ваш код 3333",
+            "Дата попытки отправки": "2026-11-04T10:00:00+03:00",
+        }
+    )
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", rows)
+    templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
+    import_report = container.import_statistics.execute(ImportStatisticsRequest(path=statistics))
+    container.import_templates.execute(ImportTemplatesRequest(path=templates))
+    view = container.analyze_templates.execute(AnalyzeRequest(batch_id=import_report.batch.id))
+
+    assert len(view.candidates) == 1
+    candidate = view.candidates[0]
+    assert candidate.messages == 6
+
+    messages = container.matched_messages.for_candidate(view.batch_id, candidate)
+
+    assert [item.message_id for item in messages] == [f"O{index}" for index in range(6)]
+    assert all(item.text.startswith("Заказ ") for item in messages)
+    assert all(item.delivery_status == "Успешная доставка" for item in messages)
+
+
 def test_templates_preview_and_dedupe(tmp_path: Path, container) -> None:
     rows = template_rows() + template_rows()
     path = write_templates_xlsx(tmp_path / "templates.xlsx", rows)

@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from mts_templates.domain.analytics.normalization import (
@@ -21,8 +21,8 @@ from mts_templates.domain.analytics.template_syntax import (
     compile_pattern,
     normalize_for_matching,
 )
-from mts_templates.domain.entities import SmsTemplate
-from mts_templates.domain.value_objects import Operator
+from mts_templates.domain.entities import SmsMessage, SmsTemplate
+from mts_templates.domain.value_objects import MessageClass, Operator
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,3 +96,44 @@ def match_message(
             if template.applies_to(operator):
                 return template
     return candidates[0]
+
+
+def resolve_template(
+    message: SmsMessage,
+    compiled: Mapping[str, tuple[CompiledTemplate, ...]],
+    policy: NormalizationPolicy = DEFAULT_NORMALIZATION,
+    *,
+    sender_case_sensitive: bool = False,
+) -> CompiledTemplate | None:
+    """Шаблон, подпавший под сообщение; выбор при нескольких совпадениях — как в анализе."""
+    wildcard = compiled.get("", ())
+    key = sender_key(message.sender, case_sensitive=sender_case_sensitive)
+    pool = compiled.get(key, ()) + wildcard if key else wildcard
+    if not pool or not message.text.strip():
+        return None
+    return match_message(message.text, pool, message.operator, policy)
+
+
+def matches_candidate_pattern(
+    message: SmsMessage,
+    pattern: TemplatePattern,
+    sender_keys: frozenset[str],
+    policy: NormalizationPolicy = DEFAULT_NORMALIZATION,
+    *,
+    sender_case_sensitive: bool = False,
+) -> bool:
+    """Подпадает ли сообщение под шаблон-кандидат: отправитель и полный текст."""
+    key = sender_key(message.sender, case_sensitive=sender_case_sensitive)
+    if key not in sender_keys:
+        return False
+    return pattern.fullmatch(normalize_for_matching(message.text, policy))
+
+
+def is_candidate_message(message: SmsMessage, *, delivered_only: bool) -> bool:
+    """Сообщение, из которого может быть собран кандидат по правилам 11."""
+    return (
+        message.message_class is MessageClass.ORDINARY
+        and message.segments > 0
+        and bool(message.text.strip())
+        and (not delivered_only or message.delivered)
+    )

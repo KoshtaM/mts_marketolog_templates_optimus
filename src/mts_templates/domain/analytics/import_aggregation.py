@@ -120,7 +120,18 @@ def _build_message(base: RawSmsRow, group: list[RawSmsRow]) -> SmsMessage:
         cost=total_cost,
         delivered=any(row.delivered for row in group),
         billing_rows=billing_rows,
+        send_status=_status(group, "send_status"),
+        delivery_status=_status(group, "delivery_status"),
     )
+
+
+def _status(group: list[RawSmsRow], field: str) -> str:
+    """Статус логического сообщения: первое непустое значение биллинговых строк."""
+    for row in group:
+        value = getattr(row, field)
+        if isinstance(value, str) and value:
+            return value
+    return ""
 
 
 def _check_consistency(message_id: str, group: list[RawSmsRow]) -> list[QualityIssue]:

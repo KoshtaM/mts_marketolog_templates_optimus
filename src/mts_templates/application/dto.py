@@ -328,6 +328,19 @@ class CandidateView:
 
 
 @dataclass(frozen=True, slots=True)
+class MatchedMessageView:
+    """Реальная отправка загрузки, подпавшая под шаблон или шаблон-кандидат."""
+
+    message_id: str
+    text: str
+    segments: int
+    masked_recipient: str
+    sent_at: datetime
+    operator: str
+    delivery_status: str
+
+
+@dataclass(frozen=True, slots=True)
 class AnalysisView:
     """Результат прогона анализа для экранов «Шаблоны» и «Кандидаты»."""
 

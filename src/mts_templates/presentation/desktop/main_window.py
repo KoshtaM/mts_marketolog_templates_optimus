@@ -52,12 +52,14 @@ class MainWindow(QMainWindow):
         )
         self._templates_page = TemplatesPage(
             analyze_templates=container.analyze_templates,
+            matched_messages=container.matched_messages,
             list_batches=container.list_batches,
             settings_provider=container.settings_store.load,
             runner=self._runner,
         )
         self._candidates_page = CandidatesPage(
             find_candidates=container.find_candidates,
+            matched_messages=container.matched_messages,
             list_batches=container.list_batches,
             settings_provider=container.settings_store.load,
             runner=self._runner,

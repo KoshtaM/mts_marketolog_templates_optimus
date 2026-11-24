@@ -96,8 +96,9 @@ class SqliteImportRepository:
             """
             INSERT INTO messages
                 (id, batch_id, sent_at, recipient, operator, sender, text, segments,
-                 message_class, cost_kopecks, delivered, package_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 message_class, cost_kopecks, delivered, package_type,
+                 send_status, delivery_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 (
@@ -113,6 +114,8 @@ class SqliteImportRepository:
                     money_to_kopecks(message.cost),
                     int(message.delivered),
                     message.billing_rows[0].package_type if message.billing_rows else None,
+                    message.send_status or None,
+                    message.delivery_status or None,
                 )
                 for message in messages
             ),

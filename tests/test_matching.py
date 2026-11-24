@@ -2,14 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from mts_templates.domain.analytics.matching import (
     CompiledTemplate,
     compile_template,
     compile_templates,
+    is_candidate_message,
     match_message,
+    matches_candidate_pattern,
+    resolve_template,
 )
+from mts_templates.domain.analytics.template_syntax import compile_pattern
 from mts_templates.domain.entities import SmsTemplate
-from mts_templates.domain.value_objects import Operator
+from mts_templates.domain.value_objects import MessageClass, Operator
+from tests.helpers import make_message
 
 
 def _template(
@@ -170,3 +177,42 @@ def test_message_without_text_is_not_matched() -> None:
     template = _compiled("t1", "Ваш код %d")
 
     assert _matched_id("   ", (template,)) is None
+
+
+def test_resolve_template_also_checks_universal_templates() -> None:
+    """Универсальные шаблоны работают и для сообщений с конкретным отправителем."""
+    compiled = compile_templates(
+        [
+            _template("sender", "Оплата получена", sender="TEST"),
+            _template("universal", "Универсальный шаблон", sender=""),
+        ]
+    )
+    message = replace(make_message("m"), text="Универсальный шаблон")
+
+    hit = resolve_template(message, compiled)
+
+    assert hit is not None and hit.template_id == "universal"
+
+
+def test_candidate_pattern_requires_sender_and_full_match() -> None:
+    pattern = compile_pattern("Заказ %d готов к выдаче")
+    message = replace(make_message("m"), text="Заказ 1234 готов к выдаче")
+
+    assert matches_candidate_pattern(message, pattern, frozenset({"test"}))
+    assert not matches_candidate_pattern(message, pattern, frozenset({"other"}))
+    assert not matches_candidate_pattern(
+        replace(message, text="Заказ 1234 готов к выдаче, срочно"), pattern, frozenset({"test"})
+    )
+
+
+def test_candidate_message_filters_class_segments_and_delivery() -> None:
+    ordinary = make_message("m", message_class=MessageClass.ORDINARY, delivered=True)
+    templated = replace(ordinary, message_class=MessageClass.TEMPLATED)
+    zero_segments = replace(ordinary, segments=0)
+    undelivered = replace(ordinary, delivered=False)
+
+    assert is_candidate_message(ordinary, delivered_only=True)
+    assert is_candidate_message(undelivered, delivered_only=False)
+    assert not is_candidate_message(templated, delivered_only=True)
+    assert not is_candidate_message(zero_segments, delivered_only=True)
+    assert not is_candidate_message(undelivered, delivered_only=True)
