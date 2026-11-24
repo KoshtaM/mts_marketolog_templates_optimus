@@ -492,6 +492,9 @@ class ReportBundle:
     baseline_mode: str
     template_fee: Money
     generated_at: datetime
+    operators: tuple[OperatorStatistics, ...] = ()
+    segmentation: SegmentationStatistics | None = None
+    daily_segments: tuple[DailySegments, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

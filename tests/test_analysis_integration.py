@@ -297,6 +297,7 @@ def test_export_report_contains_all_sheets(tmp_path: Path, container) -> None:
         "Шаблоны",
         "Операторы",
         "Кандидаты",
+        "Графики",
         "Предупреждения",
     ]
     summary = workbook["Сводка"]
@@ -312,6 +313,11 @@ def test_export_report_contains_all_sheets(tmp_path: Path, container) -> None:
     assert "Без шаблона/мес, ₽" in headers
     assert "Выгода/мес, ₽" in headers
     assert "Baseline, ₽" not in headers
+
+    charts = workbook["Графики"]
+    assert len(charts._charts) >= 10
+    chart_headers = [cell.value for cell in charts[1][:3]]
+    assert chart_headers == ["Класс", "Сегменты", "Стоимость, ₽"]
     workbook.close()
 
 
