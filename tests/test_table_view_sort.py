@@ -54,3 +54,67 @@ def test_sort_by_title_rejects_unknown_column() -> None:
     except ValueError:
         return
     raise AssertionError("Ожидалось исключение ValueError")
+
+
+@dataclass(frozen=True)
+class OperatorRow:
+    operator: str
+    listed: bool
+    share: float
+
+
+OPERATOR_COLUMNS = (
+    Column("Оператор", lambda item: item.operator),
+    Column("В списке", lambda item: item.listed),
+    Column("Доля (%)", lambda item: item.share),
+)
+
+
+def test_secondary_sort_breaks_ties_by_share_descending() -> None:
+    model = RowsTableModel(OPERATOR_COLUMNS)
+    model.set_rows(
+        [
+            OperatorRow("Tele2", False, 0.9),
+            OperatorRow("MTS", True, 0.5),
+            OperatorRow("Megafon", False, 0.1),
+            OperatorRow("Beeline", True, 0.8),
+        ]
+    )
+    table, proxy = build_table(
+        model,
+        secondary_sort=("Доля (%)", Qt.SortOrder.DescendingOrder),
+    )
+
+    sort_by_title(table, "В списке", Qt.SortOrder.DescendingOrder)
+
+    assert [proxy.index(row, 0).data() for row in range(proxy.rowCount())] == [
+        "Beeline",
+        "MTS",
+        "Tele2",
+        "Megafon",
+    ]
+
+
+def test_secondary_sort_stays_descending_with_ascending_primary() -> None:
+    model = RowsTableModel(OPERATOR_COLUMNS)
+    model.set_rows(
+        [
+            OperatorRow("Tele2", False, 0.9),
+            OperatorRow("MTS", True, 0.5),
+            OperatorRow("Megafon", False, 0.1),
+            OperatorRow("Beeline", True, 0.8),
+        ]
+    )
+    table, proxy = build_table(
+        model,
+        secondary_sort=("Доля (%)", Qt.SortOrder.DescendingOrder),
+    )
+
+    sort_by_title(table, "В списке", Qt.SortOrder.AscendingOrder)
+
+    assert [proxy.index(row, 0).data() for row in range(proxy.rowCount())] == [
+        "Tele2",
+        "Megafon",
+        "Beeline",
+        "MTS",
+    ]

@@ -226,7 +226,13 @@ class TemplatesPage(QWidget):
         self._operator_model = RowsTableModel(
             OPERATOR_COLUMNS, self, row_color=self._operator_row_color
         )
-        self._operator_table, _ = build_table(self._operator_model, self, stretch_column=None)
+        self._operator_table, _ = build_table(
+            self._operator_model,
+            self,
+            stretch_column=None,
+            secondary_sort=("Доля (%)", Qt.SortOrder.DescendingOrder),
+        )
+        sort_by_title(self._operator_table, "В списке", Qt.SortOrder.DescendingOrder)
         self._profit_total = BenefitTotal("Выгода выгодных шаблонов, ₽/мес", self, inline=True)
         self._loss_total = BenefitTotal("Убыток убыточных шаблонов, ₽/мес", self, inline=True)
         self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self, inline=True)

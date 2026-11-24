@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 from PySide6.QtCore import (
+    QAbstractItemModel,
     QModelIndex,
     QPersistentModelIndex,
     QSortFilterProxyModel,
@@ -90,11 +92,49 @@ class RowsTableView(QTableView):
             self._applying = False
 
 
-class SortedFilterProxy(QSortFilterProxyModel):
-    """Сортирует по `UserRole` и фильтрует по всем колонкам."""
+def column_index(model: QAbstractItemModel, title: str) -> int:
+    """Номер колонки по заголовку."""
+    for index in range(model.columnCount()):
+        if model.headerData(index, Qt.Orientation.Horizontal) == title:
+            return index
+    raise ValueError(f"Колонка {title!r} не найдена")
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+
+def _compare(left: Any, right: Any) -> int:
+    """Сравнение значений сортировки: -1, 0 или 1."""
+    if left is None:
+        return 0 if right is None else -1
+    if right is None:
+        return 1
+    try:
+        if left < right:
+            return -1
+        if right < left:
+            return 1
+    except TypeError:
+        left_text, right_text = str(left), str(right)
+        if left_text < right_text:
+            return -1
+        if right_text < left_text:
+            return 1
+    return 0
+
+
+class SortedFilterProxy(QSortFilterProxyModel):
+    """Сортирует по `UserRole` и фильтрует по всем колонкам.
+
+    `secondary_sort` — колонка и направление, которые разводят строки с
+    одинаковым значением основной колонки.
+    """
+
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        secondary_sort: tuple[int, Qt.SortOrder] | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._secondary_sort = secondary_sort
         self.setSortRole(Qt.ItemDataRole.UserRole)
         self.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.setFilterKeyColumn(-1)
@@ -104,16 +144,27 @@ class SortedFilterProxy(QSortFilterProxyModel):
         left: QModelIndex | QPersistentModelIndex,
         right: QModelIndex | QPersistentModelIndex,
     ) -> bool:
-        left_value = left.data(Qt.ItemDataRole.UserRole)
-        right_value = right.data(Qt.ItemDataRole.UserRole)
-        if left_value is None:
-            return True
-        if right_value is None:
+        primary = _compare(
+            left.data(Qt.ItemDataRole.UserRole),
+            right.data(Qt.ItemDataRole.UserRole),
+        )
+        if primary != 0:
+            return primary < 0
+        if self._secondary_sort is None:
             return False
-        try:
-            return bool(left_value < right_value)
-        except TypeError:
-            return str(left_value) < str(right_value)
+        column, order = self._secondary_sort
+        model = self.sourceModel()
+        if model is None:
+            return False
+        secondary = _compare(
+            model.index(left.row(), column).data(Qt.ItemDataRole.UserRole),
+            model.index(right.row(), column).data(Qt.ItemDataRole.UserRole),
+        )
+        if secondary == 0:
+            return False
+        result = secondary < 0 if order == Qt.SortOrder.AscendingOrder else secondary > 0
+        # Прокси инвертирует результат lessThan при нисходящей основной сортировке.
+        return not result if self.sortOrder() == Qt.SortOrder.DescendingOrder else result
 
 
 def build_table(
@@ -122,14 +173,22 @@ def build_table(
     *,
     stretch_column: int | None = -1,
     min_stretch_width: int = MIN_STRETCH_WIDTH,
+    secondary_sort: tuple[str, Qt.SortOrder] | None = None,
 ) -> tuple[RowsTableView, SortedFilterProxy]:
     """Таблица с сортировкой по клику на заголовок и прокси-моделью для фильтра.
 
     `stretch_column` — колонка, забирающая свободное место: `-1` — последняя,
     `None` — свободное место остаётся справа от таблицы, число — указанная.
     `min_stretch_width` — ширина, до которой колонка сжимается при нехватке места.
+    `secondary_sort` — заголовок и направление дополнительной сортировки при
+    совпадении значения основной колонки.
     """
-    proxy = SortedFilterProxy(parent)
+    fallback = (
+        None
+        if secondary_sort is None
+        else (column_index(model, secondary_sort[0]), secondary_sort[1])
+    )
+    proxy = SortedFilterProxy(parent, secondary_sort=fallback)
     proxy.setSourceModel(model)
 
     view = RowsTableView(
@@ -167,8 +226,4 @@ def sort_by_title(view: RowsTableView, title: str, order: Qt.SortOrder) -> None:
     model = view.model()
     if model is None:
         raise ValueError("У таблицы нет модели")
-    for index in range(model.columnCount()):
-        if model.headerData(index, Qt.Orientation.Horizontal) == title:
-            view.horizontalHeader().setSortIndicator(index, order)
-            return
-    raise ValueError(f"Колонка {title!r} не найдена")
+    view.horizontalHeader().setSortIndicator(column_index(model, title), order)
