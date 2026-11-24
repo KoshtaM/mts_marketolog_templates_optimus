@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -198,6 +199,7 @@ class CandidatesPage(QWidget):
         row.setSpacing(16)
 
         left = QWidget(container)
+        left.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(8)
@@ -206,6 +208,7 @@ class CandidatesPage(QWidget):
         self._details.setMinimumWidth(SUMMARY_MIN_WIDTH)
         left_layout.addWidget(self._details, stretch=1)
 
+        self._dashboard.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         row.addWidget(left, stretch=SUMMARY_STRETCH)
         row.addWidget(self._dashboard, stretch=DASHBOARD_STRETCH)
         return container

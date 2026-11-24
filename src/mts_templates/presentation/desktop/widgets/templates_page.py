@@ -209,9 +209,9 @@ class TemplatesPage(QWidget):
             OPERATOR_COLUMNS, self, row_color=self._operator_row_color
         )
         self._operator_table, _ = build_table(self._operator_model, self, stretch_column=None)
-        self._profit_total = BenefitTotal("Выгода выгодных шаблонов, ₽/мес", self)
-        self._loss_total = BenefitTotal("Убыток убыточных шаблонов, ₽/мес", self)
-        self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self)
+        self._profit_total = BenefitTotal("Выгода выгодных шаблонов, ₽/мес", self, inline=True)
+        self._loss_total = BenefitTotal("Убыток убыточных шаблонов, ₽/мес", self, inline=True)
+        self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self, inline=True)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
         self._operator_title.setWordWrap(True)
         self._dashboard = SegmentDashboard(
