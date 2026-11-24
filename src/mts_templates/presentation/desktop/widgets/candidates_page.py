@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mts_templates.application.dto import CandidateView, ImportBatch
+from mts_templates.application.dto import AnalysisView, CandidateView, ImportBatch
 from mts_templates.application.settings import AppSettings, BenefitThresholds
 from mts_templates.application.use_cases.dashboard import ListBatches, positive_benefit
 from mts_templates.application.use_cases.find_candidates import FindCandidates
@@ -49,6 +49,11 @@ from mts_templates.presentation.desktop.widgets.benefit_totals import (
     neutral_color,
 )
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
+from mts_templates.presentation.desktop.widgets.segment_dashboard import (
+    DashboardSeries,
+    DashboardTile,
+    SegmentDashboard,
+)
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 STATUS_TITLES = {
@@ -91,6 +96,15 @@ WARNING_TEXT = (
     "Кандидаты не регистрируются автоматически: статус «Требует подтверждения» "
     "означает предложенную переменную %w{1,n}, её нужно проверить и подтвердить."
 )
+CANDIDATE_DASHBOARD_TILES = (
+    "% от всех сегментов",
+    "Сегментов",
+    "Выгода/мес",
+    "Уверенность",
+)
+SUMMARY_STRETCH = 1
+DASHBOARD_STRETCH = 1
+SUMMARY_MIN_WIDTH = 240
 
 
 def _theme_row_palette() -> RowPalette:
@@ -138,6 +152,11 @@ class CandidatesPage(QWidget):
             min_stretch_width=CANDIDATE_STRETCH_WIDTH,
         )
         self._profit_total = BenefitTotal("Выгода в месяц от внедрения выгодных кандидатов", self)
+        self._dashboard = SegmentDashboard(
+            CANDIDATE_DASHBOARD_TILES,
+            empty_title="Кандидат не выбран",
+            parent=self,
+        )
         self._busy = BusyOverlay(self._table)
 
         self._build()
@@ -156,13 +175,12 @@ class CandidatesPage(QWidget):
         self._filter.setPlaceholderText("Фильтр по тексту шаблона или отправителю")
         layout.addWidget(self._filter)
         layout.addWidget(self._summary)
-        layout.addWidget(self._profit_total)
 
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self._table)
-        splitter.addWidget(self._details)
+        splitter.addWidget(self._build_lower_section())
         splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(1, 3)
         layout.addWidget(splitter, stretch=1)
 
         self._search_button.clicked.connect(lambda: self._search(force=False))
@@ -171,6 +189,26 @@ class CandidatesPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
+
+    def _build_lower_section(self) -> QWidget:
+        """Слева — выгода и описание кандидата, справа — его мини-дашборд."""
+        container = QWidget(self)
+        row = QHBoxLayout(container)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(16)
+
+        left = QWidget(container)
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(8)
+        left_layout.addWidget(self._profit_total)
+
+        self._details.setMinimumWidth(SUMMARY_MIN_WIDTH)
+        left_layout.addWidget(self._details, stretch=1)
+
+        row.addWidget(left, stretch=SUMMARY_STRETCH)
+        row.addWidget(self._dashboard, stretch=DASHBOARD_STRETCH)
+        return container
 
     def reload(self) -> None:
         try:
@@ -197,12 +235,14 @@ class CandidatesPage(QWidget):
             self._model.set_rows(())
             self._details.setPlainText("Статистика ещё не импортирована.")
             self._profit_total.reset()
+            self._dashboard.clear()
 
     def _batch_changed(self, _index: int) -> None:
         self._candidates = ()
         self._model.set_rows(())
         self._details.setPlainText("")
         self._profit_total.reset()
+        self._dashboard.clear()
 
     def reload_settings(self) -> None:
         """Применить новые пороги выгоды и перерисовать строки таблицы."""
@@ -218,6 +258,7 @@ class CandidatesPage(QWidget):
         self._row_palette = _theme_row_palette()
         self._busy.refresh_theme()
         self._model.refresh()
+        self._dashboard.refresh_theme()
         if self._candidates:
             self._update_profit_total(self._candidates)
         else:
@@ -241,8 +282,9 @@ class CandidatesPage(QWidget):
             on_error=self._failed,
         )
 
-    def _show(self, candidates: tuple[CandidateView, ...]) -> None:
+    def _show(self, view: AnalysisView) -> None:
         self._set_busy(False)
+        candidates = view.candidates
         self._candidates = candidates
         self._model.set_rows(candidates)
         fit_columns(self._table, max_widths={0: 640})
@@ -261,7 +303,22 @@ class CandidatesPage(QWidget):
             )
         self._update_profit_total(candidates)
         self._details.setPlainText("")
+        self._dashboard.set_context(
+            view.daily_total_segments,
+            view.daily_templated_segments,
+            (view.period_from.date(), view.period_to.date()),
+        )
+        self._dashboard.show_series(None)
+        self._select_first_row()
         self.candidates_found.emit()
+
+    def _select_first_row(self) -> None:
+        """Выделить первого кандидата, чтобы мини-дашборд был заполнен."""
+        if self._proxy.rowCount() > 0:
+            self._table.selectRow(0)
+            return
+        self._details.setPlainText("")
+        self._dashboard.show_series(None)
 
     def _update_profit_total(self, candidates: tuple[CandidateView, ...]) -> None:
         """Сумма выгоды выгодных кандидатов цветом активной темы."""
@@ -292,9 +349,11 @@ class CandidatesPage(QWidget):
         index = self._proxy.mapToSource(current)  # type: ignore[arg-type]
         if not index.isValid():
             self._details.setPlainText("")
+            self._dashboard.show_series(None)
             return
         candidate = self._model.row_at(index.row())
         self._details.setPlainText(_describe(candidate))
+        self._dashboard.show_series(_candidate_series(candidate))
 
     def _set_busy(self, busy: bool, text: str = "") -> None:
         self._search_button.setEnabled(not busy)
@@ -311,6 +370,30 @@ class CandidatesPage(QWidget):
             self._details.setPlainText("Поиск кандидатов отменён.")
             return
         QMessageBox.critical(self, "Ошибка поиска кандидатов", message)
+
+
+def _candidate_series(candidate: CandidateView) -> DashboardSeries:
+    """Представление кандидата для общего мини-дашборда.
+
+    В режиме «Только шаблонированные» его сообщения добавляются к шаблонному
+    трафику: моделируется регистрация шаблона со 100 % срабатыванием.
+    """
+    benefit = candidate.net_monthly
+    tone = "positive" if benefit.amount > 0 else "negative" if benefit.amount < 0 else "neutral"
+    return DashboardSeries(
+        title=f"Кандидат · {candidate.template_text}",
+        tooltip=_describe(candidate),
+        matched=candidate.daily_segments,
+        tiles=(
+            DashboardTile(format_percent(candidate.share_of_all_segments)),
+            DashboardTile(format_int(candidate.segments)),
+            DashboardTile(format_money(benefit), tone),
+            DashboardTile(format_percent(candidate.confidence)),
+        ),
+        templated_extra=candidate.daily_segments,
+        series_label="кандидат",
+        matched_label="Сообщения кандидата",
+    )
 
 
 def _describe(candidate: CandidateView) -> str:

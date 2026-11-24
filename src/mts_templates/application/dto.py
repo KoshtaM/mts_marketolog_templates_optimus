@@ -323,6 +323,8 @@ class CandidateView:
     status: str = "auto_validated"
     warnings: tuple[str, ...] = ()
     foreign_matches: int = 0
+    share_of_all_segments: float = 0.0
+    daily_segments: tuple[DaySegments, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

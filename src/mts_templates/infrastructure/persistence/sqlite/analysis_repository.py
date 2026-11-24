@@ -92,6 +92,11 @@ class SqliteAnalysisRepository:
                                     for metrics in run.metrics
                                     if metrics.daily_segments
                                 },
+                                "candidate_daily_segments": {
+                                    candidate.candidate_id: _daily_payload(candidate.daily_segments)
+                                    for candidate in run.candidates
+                                    if candidate.daily_segments
+                                },
                             },
                             ensure_ascii=False,
                         ),
@@ -183,8 +188,12 @@ class SqliteAnalysisRepository:
             str(template_id): _day_segments(items)
             for template_id, items in dict(payload.get("template_daily_segments", {})).items()
         }
+        candidate_daily = {
+            str(candidate_id): _day_segments(items)
+            for candidate_id, items in dict(payload.get("candidate_daily_segments", {})).items()
+        }
         metrics = tuple(self._load_metrics(run_id, template_daily))
-        candidates = tuple(self._load_candidates(run_id, period))
+        candidates = tuple(self._load_candidates(run_id, period, candidate_daily))
         return AnalysisRun(
             run_id=run_id,
             batch_id=str(row["batch_id"]),
@@ -240,7 +249,12 @@ class SqliteAnalysisRepository:
             for row in rows
         ]
 
-    def _load_candidates(self, run_id: str, fallback: Period) -> list[CandidateGroup]:
+    def _load_candidates(
+        self,
+        run_id: str,
+        fallback: Period,
+        candidate_daily: dict[str, tuple[DaySegments, ...]],
+    ) -> list[CandidateGroup]:
         rows = self._database.fetchall(
             """
             SELECT group_id, template_text, messages, segments, actual_cost_kopecks,
@@ -283,6 +297,7 @@ class SqliteAnalysisRepository:
                 status=str(row["status"] or "auto_validated"),
                 warnings=tuple(str(item) for item in json.loads(row["warnings_json"] or "[]")),
                 foreign_matches=int(row["foreign_matches"] or 0),
+                daily_segments=candidate_daily.get(str(row["group_id"]), ()),
             )
             for row in rows
         ]

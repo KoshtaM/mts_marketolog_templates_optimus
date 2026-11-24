@@ -63,6 +63,7 @@ class CandidateGroup:
     status: str = "auto_validated"
     warnings: tuple[str, ...] = ()
     foreign_matches: int = 0
+    daily_segments: tuple[DaySegments, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.candidate_id:
@@ -77,6 +78,10 @@ class CandidateGroup:
             raise ValueError("confidence должен быть в диапазоне 0..1")
         if not Decimal("0") <= self.coverage <= Decimal("1"):
             raise ValueError("coverage должен быть в диапазоне 0..1")
+        ensure_unique_days(self.daily_segments)
+        daily_total = sum(item.segments for item in self.daily_segments)
+        if daily_total != self.segments:
+            raise ValueError("Дневные сегменты кандидата должны совпадать с его объёмом")
 
 
 @dataclass(frozen=True, slots=True)

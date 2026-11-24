@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from mts_templates.application.dto import AnalyzeRequest, CandidateView
+from mts_templates.application.dto import AnalysisView, AnalyzeRequest
 from mts_templates.application.use_cases.analyze_templates import AnalyzeTemplates
 
 
 class FindCandidates:
-    """Возвращает только кандидатов, переиспользуя общий сценарий анализа."""
+    """Возвращает результат анализа с кандидатами, переиспользуя общий сценарий."""
 
     def __init__(self, analyzer: AnalyzeTemplates) -> None:
         self._analyzer = analyzer
@@ -20,9 +20,8 @@ class FindCandidates:
         *,
         force: bool = False,
         should_cancel: Callable[[], bool] | None = None,
-    ) -> tuple[CandidateView, ...]:
-        view = self._analyzer.execute(
+    ) -> AnalysisView:
+        return self._analyzer.execute(
             AnalyzeRequest(batch_id=batch_id, include_candidates=True, force=force),
             should_cancel=should_cancel,
         )
-        return view.candidates

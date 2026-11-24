@@ -159,6 +159,15 @@ def test_full_analysis_scenario(tmp_path: Path, container) -> None:
     assert candidate.net_monthly.rounded().amount == Decimal("-1966.40")
     assert candidate.is_partial_period is False
     assert candidate.confidence == pytest.approx(1.0)
+    assert candidate.share_of_all_segments == pytest.approx(6 / 9)
+    assert [(item.day, item.segments) for item in candidate.daily_segments] == [
+        (date(2026, 11, 1), 1),
+        (date(2026, 11, 6), 1),
+        (date(2026, 11, 11), 1),
+        (date(2026, 11, 16), 1),
+        (date(2026, 11, 21), 1),
+        (date(2026, 11, 30), 1),
+    ]
 
     assert view.total_net_benefit.rounded().amount == Decimal("-1988.80")
 
@@ -182,6 +191,7 @@ def test_analysis_is_cached(tmp_path: Path, container) -> None:
     assert first.daily_total_segments == second.daily_total_segments
     assert first.daily_templated_segments == second.daily_templated_segments
     assert first.metrics[0].daily_segments == second.metrics[0].daily_segments
+    assert first.candidates[0].daily_segments == second.candidates[0].daily_segments
     assert container.database.fetchone("SELECT COUNT(*) AS c FROM analysis_runs")["c"] == 1
 
 

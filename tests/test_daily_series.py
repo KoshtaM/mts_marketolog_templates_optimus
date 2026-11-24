@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from mts_templates.domain.analytics.activity import DaySegments, TemplateActivity, TemplateMetrics
-from mts_templates.domain.analytics.analysis import AnalysisRun
+from mts_templates.domain.analytics.analysis import AnalysisRun, CandidateGroup
 from mts_templates.domain.entities import SmsMessage
 from mts_templates.domain.value_objects import MessageClass, Money, Operator, Period
 
@@ -48,6 +48,35 @@ def _metrics(
         net_benefit=Money.zero(),
         trigger_rate=Decimal("1"),
         active=True,
+        daily_segments=daily_segments,
+    )
+
+
+def _candidate(
+    *,
+    segments: int = 1,
+    daily_segments: tuple[DaySegments, ...] = (),
+) -> CandidateGroup:
+    return CandidateGroup(
+        candidate_id="c1",
+        template_text="Заказ %d готов",
+        messages=1,
+        segments=segments,
+        actual_cost=Money.zero(),
+        templated_cost=Money.zero(),
+        monthly_saving=Money.zero(),
+        template_fee=Money.zero(),
+        net_monthly=Money.zero(),
+        payback_months=None,
+        confidence=Decimal("1"),
+        coverage=Decimal("1"),
+        senders=("TEST",),
+        operators=(Operator.MTS,),
+        period=Period(
+            start=datetime(2026, 11, 1, 0, 0, tzinfo=MSK),
+            end=datetime(2026, 11, 4, 23, 59, tzinfo=MSK),
+        ),
+        is_partial_period=False,
         daily_segments=daily_segments,
     )
 
@@ -151,3 +180,30 @@ def test_run_accepts_template_segments_within_daily_traffic() -> None:
     run = _run(metrics=(metrics,), daily_segments=(DaySegments(day=day, segments=10),))
 
     assert run.daily_segments == (DaySegments(day=day, segments=10),)
+
+
+def test_candidate_rejects_duplicate_days() -> None:
+    day = DaySegments(day=date(2026, 11, 1), segments=1)
+
+    with pytest.raises(ValueError):
+        _candidate(segments=2, daily_segments=(day, day))
+
+
+def test_candidate_rejects_daily_total_mismatch() -> None:
+    with pytest.raises(ValueError):
+        _candidate(
+            segments=5,
+            daily_segments=(DaySegments(day=date(2026, 11, 1), segments=4),),
+        )
+
+
+def test_candidate_accepts_matching_daily_series() -> None:
+    candidate = _candidate(
+        segments=3,
+        daily_segments=(
+            DaySegments(day=date(2026, 11, 1), segments=1),
+            DaySegments(day=date(2026, 11, 2), segments=2),
+        ),
+    )
+
+    assert sum(item.segments for item in candidate.daily_segments) == candidate.segments

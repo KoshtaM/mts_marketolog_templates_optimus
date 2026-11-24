@@ -55,13 +55,23 @@ from mts_templates.presentation.desktop.table_filters import operator_rows_for_t
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
-from mts_templates.presentation.desktop.widgets.template_dashboard import TemplateDashboard
+from mts_templates.presentation.desktop.widgets.segment_dashboard import (
+    DashboardSeries,
+    DashboardTile,
+    SegmentDashboard,
+)
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 OPERATOR_TITLE = "Срабатывание по операторам получателя"
 SUMMARY_MIN_WIDTH = 160
 DASHBOARD_STRETCH = 3
 SUMMARY_STRETCH = 2
+TEMPLATE_DASHBOARD_TILES = (
+    "% от всех сегментов",
+    "% от шаблонированных",
+    "Выгода/мес",
+    "Срабатывание",
+)
 
 
 def _theme_row_palette() -> RowPalette:
@@ -204,7 +214,11 @@ class TemplatesPage(QWidget):
         self._all_total = BenefitTotal("Выгода всех шаблонов, ₽/мес", self)
         self._operator_title = QLabel(OPERATOR_TITLE, self)
         self._operator_title.setWordWrap(True)
-        self._dashboard = TemplateDashboard(self)
+        self._dashboard = SegmentDashboard(
+            TEMPLATE_DASHBOARD_TILES,
+            empty_title="Шаблон не выбран",
+            parent=self,
+        )
         self._busy = BusyOverlay(self._table)
 
         self._build()
@@ -465,7 +479,7 @@ class TemplatesPage(QWidget):
         )
         fit_columns(self._operator_table)
         self._fit_operator_width()
-        self._dashboard.show_template(metric)
+        self._dashboard.show_series(_template_series(metric))
         if metric is None:
             self._operator_title.setText(OPERATOR_TITLE)
             return
@@ -502,6 +516,25 @@ class TemplatesPage(QWidget):
             self._summary.setText("Анализ отменён.")
             return
         QMessageBox.critical(self, "Ошибка анализа", message)
+
+
+def _template_series(metric: TemplateMetricsView | None) -> DashboardSeries | None:
+    """Представление выбранного шаблона для общего мини-дашборда."""
+    if metric is None:
+        return None
+    benefit = metric.monthly_net_benefit
+    tone = "positive" if benefit.amount > 0 else "negative" if benefit.amount < 0 else "neutral"
+    return DashboardSeries(
+        title=f"{metric.name} · ID {metric.template_id}",
+        tooltip=metric.text,
+        matched=metric.daily_segments,
+        tiles=(
+            DashboardTile(format_percent(metric.share_of_all_segments)),
+            DashboardTile(format_percent(metric.share_of_templated_segments)),
+            DashboardTile(format_money(benefit), tone),
+            DashboardTile(format_percent(metric.trigger_rate)),
+        ),
+    )
 
 
 def _batch_title(batch: ImportBatch) -> str:

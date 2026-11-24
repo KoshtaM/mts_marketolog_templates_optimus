@@ -53,7 +53,7 @@ WARNING_NO_TEMPLATED_RATE = (
 BENEFIT_FORMULA_VERSION = 2
 SEGMENTATION_VERSION = 2
 CANDIDATE_TEXT_VERSION = 2
-DAILY_SERIES_VERSION = 1
+DAILY_SERIES_VERSION = 2
 
 
 def compute_config_hash(
@@ -337,6 +337,20 @@ def _candidate_from_csg(
         status=candidate.status.value,
         warnings=candidate.warnings,
         foreign_matches=candidate.foreign_matches,
+        daily_segments=_candidate_daily_segments(candidate.messages),
+    )
+
+
+def _candidate_daily_segments(messages: Sequence[SmsMessage]) -> tuple[DaySegments, ...]:
+    """Сегменты кандидата по дням: те же сообщения, что попали в группу."""
+    totals: dict[date, int] = {}
+    for message in messages:
+        if message.segments <= 0:
+            continue
+        day = message.sent_at.date()
+        totals[day] = totals.get(day, 0) + message.segments
+    return tuple(
+        DaySegments(day=day, segments=segments) for day, segments in sorted(totals.items())
     )
 
 

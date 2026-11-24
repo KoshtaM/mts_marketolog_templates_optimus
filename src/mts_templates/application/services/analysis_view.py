@@ -103,6 +103,8 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
             status=candidate.status,
             warnings=candidate.warnings,
             foreign_matches=candidate.foreign_matches,
+            share_of_all_segments=_share(candidate.segments, total_segments),
+            daily_segments=candidate.daily_segments,
         )
         for candidate in run.candidates
     )

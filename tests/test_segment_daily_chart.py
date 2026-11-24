@@ -1,4 +1,4 @@
-"""Дневной график выбранного шаблона на вкладке «Шаблоны»."""
+"""Дневной график выбранного шаблона или кандидата в мини-дашборде."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from mts_templates.presentation.desktop.daily_chart import (
     TEMPLATE_OTHER_COLOR,
     TEMPLATE_OTHER_LABEL,
     TEMPLATE_OTHER_TEMPLATED_LABEL,
-    build_template_daily_chart,
+    build_segment_daily_chart,
+    merge_day_segments,
 )
 
 
@@ -20,7 +21,7 @@ def _day(day: int, segments: int) -> DaySegments:
 
 
 def test_bars_cover_every_day_of_the_period() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(2, 9), _day(3, 4)),
         (_day(2, 5),),
         period_start=date(2026, 11, 1),
@@ -32,7 +33,7 @@ def test_bars_cover_every_day_of_the_period() -> None:
 
 
 def test_matched_part_is_overlay_inside_the_base_bar() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(2, 9),),
         (_day(2, 5),),
         period_start=date(2026, 11, 2),
@@ -50,7 +51,7 @@ def test_matched_part_is_overlay_inside_the_base_bar() -> None:
 
 
 def test_day_without_matches_has_only_other_traffic() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(3, 4),),
         (),
         period_start=date(2026, 11, 3),
@@ -64,7 +65,7 @@ def test_day_without_matches_has_only_other_traffic() -> None:
 
 
 def test_matched_beyond_total_is_clamped_not_negative() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(2, 3),),
         (_day(2, 5),),
         period_start=date(2026, 11, 2),
@@ -79,7 +80,7 @@ def test_matched_beyond_total_is_clamped_not_negative() -> None:
 
 
 def test_templated_only_uses_templated_traffic_as_base() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(2, 7),),
         (_day(2, 9),),
         period_start=date(2026, 11, 2),
@@ -102,7 +103,7 @@ def test_templated_only_uses_templated_traffic_as_base() -> None:
 
 
 def test_caption_and_legend_describe_both_parts() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(2, 9), _day(3, 4)),
         (_day(2, 5),),
         period_start=date(2026, 11, 1),
@@ -116,8 +117,37 @@ def test_caption_and_legend_describe_both_parts() -> None:
     )
 
 
+def test_candidate_uses_its_own_labels() -> None:
+    data = build_segment_daily_chart(
+        (_day(2, 7),),
+        (_day(2, 3),),
+        period_start=date(2026, 11, 2),
+        period_end=date(2026, 11, 2),
+        templated_only=True,
+        series_label="кандидат",
+        matched_label="Сообщения кандидата",
+    )
+
+    assert data.bars[0].overlays[0].label == "Сообщения кандидата"
+    assert data.legend[0] == ("Сообщения кандидата", TEMPLATE_MATCHED_COLOR)
+    assert data.caption == "кандидат: 3 из 7 шаблонированных сегментов"
+
+
+def test_merge_day_segments_sums_dates_and_sorts() -> None:
+    merged = merge_day_segments(
+        (_day(3, 2), _day(1, 1)),
+        (_day(3, 4), _day(2, 5)),
+    )
+
+    assert [(item.day, item.segments) for item in merged] == [
+        (date(2026, 11, 1), 1),
+        (date(2026, 11, 2), 5),
+        (date(2026, 11, 3), 6),
+    ]
+
+
 def test_empty_period_has_no_caption() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (),
         (),
         period_start=date(2026, 11, 1),
@@ -130,7 +160,7 @@ def test_empty_period_has_no_caption() -> None:
 
 
 def test_invalid_period_falls_back_to_days_with_data() -> None:
-    data = build_template_daily_chart(
+    data = build_segment_daily_chart(
         (_day(3, 4),),
         (_day(1, 2),),
         period_start=date(2026, 11, 5),

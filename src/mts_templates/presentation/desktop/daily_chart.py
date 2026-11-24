@@ -98,20 +98,22 @@ def build_daily_chart(daily: Sequence[DailySegments]) -> DailyChartData:
     return DailyChartData(bars=tuple(bars), legend=legend, caption=caption)
 
 
-def build_template_daily_chart(
+def build_segment_daily_chart(
     totals: Sequence[DaySegments],
     matched: Sequence[DaySegments],
     *,
     period_start: date,
     period_end: date,
     templated_only: bool = False,
+    series_label: str = "шаблон",
+    matched_label: str = TEMPLATE_MATCHED_LABEL,
 ) -> DailyChartData:
-    """Столбцы дней выбранного шаблона: основной трафик и совпавшие сегменты.
+    """Столбцы дней выбранного шаблона или кандидата.
 
     `totals` — базовый ряд: весь трафик дня или только шаблонированные SMS.
     Основной столбец (teal) показывает базовый объём целиком, совпавшие сегменты
-    (dark orange) рисуются поверх него на общей высоте от основания. Дни без
-    данных заполняются нулями, чтобы ось X покрывала период целиком.
+    (dark orange) рисуются поверх него. Дни без данных заполняются нулями,
+    чтобы ось X покрывала период целиком.
     """
     total_by_day = {item.day: item.segments for item in totals}
     matched_by_day = {item.day: item.segments for item in matched}
@@ -131,7 +133,7 @@ def build_template_daily_chart(
         if day_matched:
             overlays.append(
                 BarOverlay(
-                    TEMPLATE_MATCHED_LABEL,
+                    matched_label,
                     float(day_matched),
                     TEMPLATE_MATCHED_COLOR,
                 )
@@ -145,19 +147,30 @@ def build_template_daily_chart(
         )
 
     legend = (
-        (TEMPLATE_MATCHED_LABEL, TEMPLATE_MATCHED_COLOR),
+        (matched_label, TEMPLATE_MATCHED_COLOR),
         (other_label, TEMPLATE_OTHER_COLOR),
     )
     if not overall:
         caption = ""
     elif templated_only:
         caption = (
-            f"шаблон: {format_int(matched_total)} из {format_int(overall)} "
+            f"{series_label}: {format_int(matched_total)} из {format_int(overall)} "
             "шаблонированных сегментов"
         )
     else:
-        caption = f"шаблон: {format_int(matched_total)} из {format_int(overall)} сегментов"
+        caption = f"{series_label}: {format_int(matched_total)} из {format_int(overall)} сегментов"
     return DailyChartData(bars=tuple(bars), legend=legend, caption=caption)
+
+
+def merge_day_segments(*series: Sequence[DaySegments]) -> tuple[DaySegments, ...]:
+    """Сложить несколько дневных рядов по датам."""
+    totals: dict[date, int] = {}
+    for rows in series:
+        for item in rows:
+            totals[item.day] = totals.get(item.day, 0) + item.segments
+    return tuple(
+        DaySegments(day=day, segments=segments) for day, segments in sorted(totals.items())
+    )
 
 
 def _period_days(
