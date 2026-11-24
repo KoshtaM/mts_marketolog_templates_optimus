@@ -66,6 +66,9 @@ OPERATOR_TITLE = "Срабатывание по операторам получ�
 SUMMARY_MIN_WIDTH = 160
 DASHBOARD_STRETCH = 3
 SUMMARY_STRETCH = 2
+TABLE_STRETCH = 4
+LOWER_STRETCH = 3
+SPLIT_WEIGHT_SCALE = 1000
 TEMPLATE_DASHBOARD_TILES = (
     "% от всех сегментов",
     "% от шаблонированных",
@@ -240,8 +243,11 @@ class TemplatesPage(QWidget):
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self._table)
         splitter.addWidget(self._build_operator_section())
-        splitter.setStretchFactor(0, 5)
-        splitter.setStretchFactor(1, 3)
+        splitter.setStretchFactor(0, TABLE_STRETCH)
+        splitter.setStretchFactor(1, LOWER_STRETCH)
+        # setSizes принимает пиксели и обрезает их по минимальным размерам виджетов,
+        # поэтому веса умножаются: Qt нормирует большие значения на доступную высоту.
+        splitter.setSizes([TABLE_STRETCH * SPLIT_WEIGHT_SCALE, LOWER_STRETCH * SPLIT_WEIGHT_SCALE])
         layout.addWidget(splitter, stretch=1)
 
         self._analyze_button.clicked.connect(lambda: self._analyze(force=False))
