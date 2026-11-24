@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from mts_templates.application.dto import MatchedMessageView
 from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import COLUMNS
 from mts_templates.presentation.desktop.models.table_model import RowsTableModel
+from mts_templates.presentation.desktop.widgets.candidates_page import COLUMNS as CANDIDATE_COLUMNS
 from mts_templates.presentation.desktop.widgets.templates_page import COLUMNS as TEMPLATE_COLUMNS
 
 MSK = timezone(timedelta(hours=3))
@@ -35,6 +36,13 @@ def test_templates_table_has_no_button_column() -> None:
     titles = [column.title for column in TEMPLATE_COLUMNS]
 
     assert titles[0] == "Шаблон"
+    assert "⋯" not in titles
+
+
+def test_candidates_table_has_no_button_column() -> None:
+    titles = [column.title for column in CANDIDATE_COLUMNS]
+
+    assert titles[0] == "Шаблон-кандидат"
     assert "⋯" not in titles
 
 

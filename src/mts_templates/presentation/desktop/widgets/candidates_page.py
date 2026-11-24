@@ -40,7 +40,6 @@ from mts_templates.presentation.desktop.benefit_style import (
 from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import (
     MatchedMessagesDialog,
 )
-from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
     format_int,
     format_money,
@@ -59,7 +58,6 @@ from mts_templates.presentation.desktop.widgets.benefit_totals import (
     neutral_color,
 )
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
-from mts_templates.presentation.desktop.widgets.cell_button import CellButtonDelegate
 from mts_templates.presentation.desktop.widgets.segment_dashboard import (
     DashboardSeries,
     DashboardTile,
@@ -82,12 +80,16 @@ def _status_title(status: str) -> str:
 # Текст шаблона-кандидата должен занимать вдвое больше места, чем по умолчанию.
 CANDIDATE_TEXT_WIDTH = 600
 CANDIDATE_STRETCH_WIDTH = MIN_STRETCH_WIDTH * 2
-MESSAGES_BUTTON_TOOLTIP = "Показать сообщения, из которых собран кандидат"
+MESSAGES_HINT = "Нажмите, чтобы показать сообщения, из которых собран кандидат"
 
 
 COLUMNS = (
-    Column("Шаблон-кандидат", lambda item: item.template_text, width=CANDIDATE_TEXT_WIDTH),
-    Column("⋯", lambda _item: "", width=34, tooltip=lambda _item: MESSAGES_BUTTON_TOOLTIP),
+    Column(
+        "Шаблон-кандидат",
+        lambda item: item.template_text,
+        width=CANDIDATE_TEXT_WIDTH,
+        tooltip=lambda item: f"{item.template_text}\n\n{MESSAGES_HINT}",
+    ),
     Column("Статус", lambda item: item.status, formatter=_status_title, width=150),
     Column("Сообщений", lambda item: item.messages, formatter=format_int, width=80),
     Column("Сегментов", lambda item: item.segments, formatter=format_int, width=80),
@@ -168,8 +170,6 @@ class CandidatesPage(QWidget):
             stretch_column=0,
             min_stretch_width=CANDIDATE_STRETCH_WIDTH,
         )
-        self._messages_button = CellButtonDelegate("⋯", self)
-        self._table.setItemDelegateForColumn(1, self._messages_button)
         self._profit_total = BenefitTotal("Выгода в месяц от внедрения выгодных кандидатов", self)
         self._dashboard = SegmentDashboard(
             CANDIDATE_DASHBOARD_TILES,
@@ -208,7 +208,6 @@ class CandidatesPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
-        self._messages_button.clicked.connect(self._show_candidate_messages)
 
     def _build_lower_section(self) -> QWidget:
         """Слева — выгода и описание кандидата, справа — его мини-дашборд."""
@@ -356,21 +355,13 @@ class CandidatesPage(QWidget):
         self._profit_total.set_value(format_money(profitable), color)
 
     def _cell_clicked(self, index: QModelIndex) -> None:
-        """Щелчок по тексту кандидата показывает его целиком с копированием."""
+        """Щелчок по тексту кандидата открывает список его сообщений."""
         if index.column() != 0:
             return
-        source = self._proxy.mapToSource(index)
-        if not source.isValid():
-            return
-        candidate = self._model.row_at(source.row())
-        TemplateTextDialog(
-            candidate.template_text,
-            title=f"Текст шаблона-кандидата · {candidate.candidate_id}",
-            parent=self,
-        ).exec()
+        self._show_candidate_messages(index)
 
     def _show_candidate_messages(self, index: QModelIndex) -> None:
-        """Кнопка справа от текста кандидата открывает список его сообщений."""
+        """Открыть список сообщений, из которых собран кандидат."""
         source = self._proxy.mapToSource(index)
         if not source.isValid() or not self._batch_id:
             return
