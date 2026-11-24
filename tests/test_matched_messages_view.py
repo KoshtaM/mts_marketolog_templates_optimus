@@ -38,10 +38,23 @@ def test_templates_table_has_no_button_column() -> None:
     assert "⋯" not in titles
 
 
+def test_templates_table_layout() -> None:
+    titles = [column.title for column in TEMPLATE_COLUMNS]
+    widths = {column.title: column.width for column in TEMPLATE_COLUMNS}
+
+    assert titles[-1] == "Отправитель"
+    assert set(titles).issuperset({"Достав.", "Срабат.", "% Срабат."})
+    assert not set(titles).intersection({"Доставлено", "Срабатываний", "Срабатывание"})
+    assert widths["Сообщений"] == 50
+    assert widths["Достав."] == 57
+    assert widths["Срабат."] == 67
+    assert widths["% Срабат."] == 60
+
+
 def test_column_headers_match_requirements() -> None:
     assert [column.title for column in COLUMNS] == [
         "Сообщение",
-        "Количество сегментов",
+        "Длина",
         "Номер",
         "Дата/Время отправки",
         "Оператор",

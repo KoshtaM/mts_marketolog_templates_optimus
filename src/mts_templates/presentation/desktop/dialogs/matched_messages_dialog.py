@@ -38,7 +38,7 @@ COLUMNS = (
         width=380,
         tooltip=lambda item: item.text,
     ),
-    Column("Количество сегментов", lambda item: item.segments, width=150),
+    Column("Длина", lambda item: item.segments, width=150),
     Column("Номер", lambda item: item.masked_recipient, width=140),
     Column("Дата/Время отправки", lambda item: item.sent_at, width=165),
     Column("Оператор", lambda item: item.operator, width=115),

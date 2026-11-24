@@ -375,6 +375,29 @@ def test_list_matched_messages_for_template(tmp_path: Path, container) -> None:
     ]
 
 
+def test_matched_message_status_is_never_empty(tmp_path: Path, container) -> None:
+    rows = statistics_rows()
+    rows[0] = {
+        **rows[0],
+        "Статус отправки": "",
+        "Статус доставки СМС или ММС": "",
+    }
+    rows[1] = {
+        **rows[1],
+        "Статус отправки": "Ошибка отправки",
+        "Статус доставки СМС или ММС": "",
+    }
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", rows)
+    templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
+    import_report = container.import_statistics.execute(ImportStatisticsRequest(path=statistics))
+    container.import_templates.execute(ImportTemplatesRequest(path=templates))
+    view = container.analyze_templates.execute(AnalyzeRequest(batch_id=import_report.batch.id))
+
+    messages = container.matched_messages.for_template(view.batch_id, view.metrics[0].template_id)
+
+    assert [item.delivery_status for item in messages] == ["Статус не указан", "Ошибка отправки"]
+
+
 def test_list_matched_messages_for_candidate(tmp_path: Path, container) -> None:
     rows = statistics_rows()
     rows.append(

@@ -74,6 +74,7 @@ TABLE_STRETCH = 4
 LOWER_STRETCH = 3
 SPLIT_WEIGHT_SCALE = 1000
 MESSAGES_HINT = "Нажмите, чтобы показать сообщения, подпавшие под шаблон"
+NARROW_COLUMNS = frozenset({"Сообщений", "Достав.", "Срабат.", "% Срабат."})
 TEMPLATE_DASHBOARD_TILES = (
     "% от всех сегментов",
     "% от шаблонированных",
@@ -101,13 +102,12 @@ COLUMNS = (
         width=130,
         tooltip=lambda item: format_operators(item.operators),
     ),
-    Column("Отправитель", lambda item: item.sender, width=100),
     Column("Активен", lambda item: item.active, width=65),
     Column(
         "Сообщений",
         lambda item: item.matched_messages,
         formatter=format_int,
-        width=75,
+        width=50,
         tooltip=lambda item: (
             f"за период: {format_int(item.matched_messages)} · "
             f"в месяц: {format_int(item.monthly_messages)}"
@@ -142,10 +142,10 @@ COLUMNS = (
             "в сегментах шаблонированных сообщений за период"
         ),
     ),
-    Column("Доставлено", lambda item: item.delivered_messages, formatter=format_int, width=85),
+    Column("Достав.", lambda item: item.delivered_messages, formatter=format_int, width=57),
     Column("Получателей", lambda item: item.unique_recipients, formatter=format_int, width=85),
-    Column("Срабатываний", lambda item: item.triggered_messages, formatter=format_int, width=100),
-    Column("Срабатывание", lambda item: item.trigger_rate, formatter=format_percent, width=90),
+    Column("Срабат.", lambda item: item.triggered_messages, formatter=format_int, width=67),
+    Column("% Срабат.", lambda item: item.trigger_rate, formatter=format_percent, width=60),
     Column("Вне списка", lambda item: item.off_operator_messages, formatter=format_int, width=80),
     Column(
         "Стоимость/мес",
@@ -166,6 +166,7 @@ COLUMNS = (
         width=100,
         tooltip=lambda item: f"за период: {format_money(item.net_benefit)}",
     ),
+    Column("Отправитель", lambda item: item.sender, width=100),
 )
 
 OPERATOR_COLUMNS = (
@@ -406,7 +407,17 @@ class TemplatesPage(QWidget):
         self._operator_triggers = view.operator_triggers
         self._model.set_rows(view.metrics)
         self._apply_filter(self._filter.text())
-        fit_columns(self._table, max_widths={0: 300})
+        fit_columns(
+            self._table,
+            max_widths={
+                0: 300,
+                **{
+                    index: column.width
+                    for index, column in enumerate(COLUMNS)
+                    if column.title in NARROW_COLUMNS
+                },
+            },
+        )
         summary = (
             f"Период {format_period(view.period_from, view.period_to)} · "
             f"подпало под шаблоны {format_int(view.matched_message_count)} из "

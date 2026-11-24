@@ -17,6 +17,8 @@ from mts_templates.domain.analytics.template_syntax import compile_pattern
 from mts_templates.domain.entities import SmsMessage
 from mts_templates.domain.errors import OperationCancelled, TemplateSyntaxError
 
+UNKNOWN_STATUS = "Статус не указан"
+
 
 class ListMatchedMessages:
     """Подбирает сообщения загрузки теми же правилами, что и прогон анализа."""
@@ -118,7 +120,7 @@ def _to_view(message: SmsMessage) -> MatchedMessageView:
         masked_recipient=mask_phone(message.recipient),
         sent_at=message.sent_at,
         operator=message.operator.value,
-        delivery_status=message.delivery_status,
+        delivery_status=message.delivery_status or message.send_status or UNKNOWN_STATUS,
     )
 
 
