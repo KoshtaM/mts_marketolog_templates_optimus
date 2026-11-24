@@ -115,9 +115,11 @@ class StackedBarChart(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         area = QRectF(self.rect().adjusted(8, 6, -8, -6))
-        self._draw_title(painter, QRectF(area.x(), area.y(), area.width(), TITLE_HEIGHT))
+        has_title = bool(self._title or self._caption)
+        if has_title:
+            self._draw_title(painter, QRectF(area.x(), area.y(), area.width(), TITLE_HEIGHT))
 
-        plot_top = area.y() + TITLE_HEIGHT
+        plot_top = area.y() + (TITLE_HEIGHT if has_title else 0.0)
         plot_top += self._draw_legend(painter, area, plot_top) + PLOT_TOP_GAP
         plot_bottom = area.bottom() - X_LABEL_HEIGHT
         plot = QRectF(area.x(), plot_top, area.width(), plot_bottom - plot_top)
