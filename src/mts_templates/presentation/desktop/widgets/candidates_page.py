@@ -383,17 +383,22 @@ class CandidatesPage(QWidget):
                 candidate,
                 should_cancel=lambda: token.cancelled,
             ),
-            on_success=lambda rows: self._open_messages_dialog(rows, candidate.candidate_id),
+            on_success=lambda rows: self._open_messages_dialog(rows, candidate),
             on_error=self._messages_failed,
         )
 
     def _open_messages_dialog(
-        self, rows: tuple[MatchedMessageView, ...], candidate_id: str
+        self, rows: tuple[MatchedMessageView, ...], candidate: CandidateView
     ) -> None:
         self._set_busy(False)
         if self._messages_dialog is None:
             self._messages_dialog = MatchedMessagesDialog(self)
-        self._messages_dialog.set_rows(rows, title=f"Сообщения кандидата · ID {candidate_id}")
+        self._messages_dialog.set_rows(
+            rows,
+            title=f"Сообщения кандидата · ID {candidate.candidate_id}",
+            template_text=candidate.template_text,
+            template_label="Полный текст шаблона-кандидата:",
+        )
         self._messages_dialog.show()
         self._messages_dialog.raise_()
 

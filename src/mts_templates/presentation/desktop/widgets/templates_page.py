@@ -46,7 +46,6 @@ from mts_templates.presentation.desktop.benefit_style import (
 from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import (
     MatchedMessagesDialog,
 )
-from mts_templates.presentation.desktop.dialogs.template_text_dialog import TemplateTextDialog
 from mts_templates.presentation.desktop.formatting import (
     format_int,
     format_money,
@@ -60,7 +59,6 @@ from mts_templates.presentation.desktop.table_filters import operator_rows_for_t
 from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
-from mts_templates.presentation.desktop.widgets.cell_button import CellButtonDelegate
 from mts_templates.presentation.desktop.widgets.segment_dashboard import (
     DashboardSeries,
     DashboardTile,
@@ -75,7 +73,7 @@ SUMMARY_STRETCH = 2
 TABLE_STRETCH = 4
 LOWER_STRETCH = 3
 SPLIT_WEIGHT_SCALE = 1000
-MESSAGES_BUTTON_TOOLTIP = "Показать сообщения, подпавшие под шаблон"
+MESSAGES_HINT = "Нажмите, чтобы показать сообщения, подпавшие под шаблон"
 TEMPLATE_DASHBOARD_TILES = (
     "% от всех сегментов",
     "% от шаблонированных",
@@ -95,9 +93,8 @@ COLUMNS = (
         "Шаблон",
         lambda item: item.text,
         width=300,
-        tooltip=lambda item: item.text,
+        tooltip=lambda item: f"{item.text}\n\n{MESSAGES_HINT}",
     ),
-    Column("⋯", lambda _item: "", width=34, tooltip=lambda _item: MESSAGES_BUTTON_TOOLTIP),
     Column(
         "Операторы",
         lambda item: format_operators(item.operators),
@@ -220,8 +217,6 @@ class TemplatesPage(QWidget):
         self._warnings.setMaximumHeight(180)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
         self._table, self._proxy = build_table(self._model, self, stretch_column=0)
-        self._messages_button = CellButtonDelegate("⋯", self)
-        self._table.setItemDelegateForColumn(1, self._messages_button)
         self._operator_model = RowsTableModel(
             OPERATOR_COLUMNS, self, row_color=self._operator_row_color
         )
@@ -270,7 +265,6 @@ class TemplatesPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
-        self._messages_button.clicked.connect(self._show_template_messages)
         self._show_operator_rows(None)
 
     def _build_operator_section(self) -> QWidget:
@@ -467,18 +461,10 @@ class TemplatesPage(QWidget):
         self._show_operator_rows(None)
 
     def _cell_clicked(self, index: QModelIndex) -> None:
-        """Щелчок по тексту шаблона показывает его целиком с копированием."""
+        """Щелчок по тексту шаблона открывает список подпавших сообщений."""
         if index.column() != 0:
             return
-        source = self._proxy.mapToSource(index)
-        if not source.isValid():
-            return
-        metric = self._model.row_at(source.row())
-        TemplateTextDialog(
-            metric.text,
-            title=f"Текст шаблона · {metric.template_id}",
-            parent=self,
-        ).exec()
+        self._show_template_messages(index)
 
     def _show_template_messages(self, index: QModelIndex) -> None:
         """Кнопка справа от текста шаблона открывает список подпавших сообщений."""
@@ -494,15 +480,21 @@ class TemplatesPage(QWidget):
                 metric.template_id,
                 should_cancel=lambda: token.cancelled,
             ),
-            on_success=lambda rows: self._open_messages_dialog(rows, metric.template_id),
+            on_success=lambda rows: self._open_messages_dialog(rows, metric),
             on_error=self._messages_failed,
         )
 
-    def _open_messages_dialog(self, rows: tuple[MatchedMessageView, ...], template_id: str) -> None:
+    def _open_messages_dialog(
+        self, rows: tuple[MatchedMessageView, ...], metric: TemplateMetricsView
+    ) -> None:
         self._set_busy(False)
         if self._messages_dialog is None:
             self._messages_dialog = MatchedMessagesDialog(self)
-        self._messages_dialog.set_rows(rows, title=f"Сообщения шаблона · ID {template_id}")
+        self._messages_dialog.set_rows(
+            rows,
+            title=f"Сообщения шаблона · ID {metric.template_id}",
+            template_text=metric.text,
+        )
         self._messages_dialog.show()
         self._messages_dialog.raise_()
 
