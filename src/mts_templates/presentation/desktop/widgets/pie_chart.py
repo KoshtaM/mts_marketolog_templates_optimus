@@ -11,6 +11,9 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from mts_templates.presentation.desktop.theme import active_palette
 
+PIE_DIAMETER_RATIO = 1.5
+"""Диаметр круговой диаграммы: задаётся как значение × `PIE_DIAMETER_RATIO` (в 1,5 раза меньше)."""
+
 
 @dataclass(frozen=True, slots=True)
 class PieSlice:
@@ -51,7 +54,10 @@ class PieChart(QWidget):
         )
         legend_rows = max(len(self._slices), 1)
         legend_height = legend_rows * 16 + 6
-        pie_size = max(40.0, min(content.width() - 6, content.height() - legend_height - 6))
+        pie_size = (
+            max(40.0, min(content.width() - 6, content.height() - legend_height - 6))
+            / PIE_DIAMETER_RATIO
+        )
         pie_rect = QRectF(
             content.x() + (content.width() - pie_size) / 2,
             content.y() + 2,

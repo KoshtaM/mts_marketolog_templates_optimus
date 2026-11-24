@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -54,7 +55,11 @@ from mts_templates.presentation.desktop.widgets.stacked_bar_chart import Stacked
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 CHART_OPERATOR_LIMIT = 5
-DAILY_CHART_HEIGHT = 300
+DAILY_CHART_HEIGHT = 220
+# Минимальная высота ряда подблоков диаграммы. Нижний ряд задаётся вдвое выше
+# верхнего (`CHART_ROW_MIN_HEIGHT * 2`); круговая диаграмма ограничена шириной,
+# поэтому нижние диаграммы не растут, когда подблоки ниже становятся выше.
+CHART_ROW_MIN_HEIGHT = 400
 
 # Шаблонированные SMS в диаграммах долей — «морская волна»: чистый зелёный
 # зарезервирован за корпоративным цветом МегаФона в диаграммах операторов.
@@ -167,6 +172,11 @@ QLabel#metricValue[tone="negative"] {
     padding-left: 8px;
     color: $text_muted;
 }
+#subBlock {
+    background: $surface_alt;
+    border: 1px solid $border;
+    border-radius: 10px;
+}
 QComboBox {
     background: $surface;
     border: 1px solid $border;
@@ -254,9 +264,11 @@ class _MetricCard(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._default_hint = "" if hint_inline else hint
 
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(3)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(2)
 
         title_label = QLabel(title, self)
         title_label.setObjectName("metricTitle")
@@ -280,7 +292,6 @@ class _MetricCard(QFrame):
         else:
             layout.addWidget(self._value)
         layout.addWidget(self._hint)
-        layout.addStretch(1)
 
     def set_value(self, text: str, *, tone: str = "neutral") -> None:
         self._value.setText(text)
@@ -371,9 +382,7 @@ class DashboardPage(QWidget):
         layout.addLayout(header)
 
         layout.addWidget(self._batch_label)
-        layout.addWidget(self._build_summary())
-        layout.addWidget(self._build_main_section())
-        layout.addWidget(self._build_daily_section())
+        layout.addWidget(self._build_columns())
         layout.addWidget(self._build_additional_section())
         layout.addWidget(self._build_warnings_section())
         layout.addStretch(1)
@@ -391,6 +400,7 @@ class DashboardPage(QWidget):
     def _build_summary(self) -> QWidget:
         """Блок «Сводка»: карточки непересекающихся показателей."""
         container = QWidget(self)
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
@@ -404,10 +414,11 @@ class DashboardPage(QWidget):
 
     def _build_cards(self) -> QWidget:
         container = QWidget(self)
+        container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         grid = QGridLayout(container)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
+        grid.setVerticalSpacing(8)
 
         definitions = (
             ("messages", "Количество сообщений", "SMS-сегментов: —"),
@@ -427,8 +438,99 @@ class DashboardPage(QWidget):
             grid.setColumnStretch(column, stretch)
         return container
 
+    def _build_charts(self) -> QWidget:
+        """Блок «Диаграммы»: круговые диаграммы долей по SMS-сегментам и операторам."""
+        box = QFrame(self)
+        box.setObjectName("sectionCard")
+        box.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+
+        title = QLabel("Диаграммы", box)
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+
+        self._segment_chart = PieChart("Доли SMS-сегментов", box)
+        self._cost_chart = PieChart("Доли расходов", box)
+        self._operator_segment_chart = PieChart("Сегменты по операторам", box)
+        self._operator_cost_chart = PieChart("Счёт по операторам", box)
+
+        segment_block = self._sub_block(box, self._segment_chart)
+        cost_block = self._sub_block(box, self._cost_chart)
+        operator_segment_block = self._sub_block(box, self._operator_segment_chart)
+        operator_cost_block = self._sub_block(box, self._operator_cost_chart)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(16)
+        grid.setVerticalSpacing(12)
+        grid.addWidget(segment_block, 0, 0)
+        grid.addWidget(cost_block, 0, 1)
+        grid.addWidget(operator_segment_block, 1, 0)
+        grid.addWidget(operator_cost_block, 1, 1)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setRowMinimumHeight(0, CHART_ROW_MIN_HEIGHT)
+        grid.setRowMinimumHeight(1, CHART_ROW_MIN_HEIGHT * 2)
+        grid.setRowStretch(0, 1)
+        grid.setRowStretch(1, 2)
+        layout.addLayout(grid)
+        return box
+
+    def _sub_block(self, parent: QWidget, content: QWidget) -> QFrame:
+        """Подблок секции: скруглённая карточка с отдельным фоном."""
+        frame = QFrame(parent)
+        frame.setObjectName("subBlock")
+        frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setContentsMargins(12, 10, 12, 10)
+        frame_layout.setSpacing(6)
+        frame_layout.addWidget(content)
+        return frame
+
+    def _build_columns(self) -> QWidget:
+        """Две независимые колонки над блоком «Дополнительно».
+
+        Левая: «Сводка» сверху, таблицы «Основное» под ней. Правая: «Диаграммы»
+        сверху, «Динамика по дням» под ними. Ширина колонок — пропорция 3:2.
+        Колонки объединены общим рядом сетки, поэтому высота у них одна и та же,
+        но внутренние блоки высоту друг друга не принуждают. Выравнивание идёт
+        за счёт блока «Динамика по дням»: он растягивается или сжимается, а
+        «Сводка» и «Диаграммы» остаются высотой по содержимому.
+        """
+        columns = QWidget(self)
+        columns_layout = QGridLayout(columns)
+        columns_layout.setContentsMargins(0, 0, 0, 0)
+        columns_layout.setHorizontalSpacing(16)
+        columns_layout.setVerticalSpacing(12)
+
+        left = QWidget(self)
+        left_layout = QVBoxLayout(left)
+        main_section = self._build_main_section()
+        main_section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        left_layout.addWidget(self._build_summary())
+        left_layout.addWidget(main_section)
+
+        right = QWidget(self)
+        right_layout = QVBoxLayout(right)
+        charts = self._build_charts()
+        charts.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        daily_section = self._build_daily_section()
+        daily_section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        right_layout.addWidget(charts)
+        right_layout.addWidget(daily_section)
+        right_layout.setStretch(0, 0)
+        right_layout.setStretch(1, 1)
+
+        columns_layout.addWidget(left, 0, 0)
+        columns_layout.addWidget(right, 0, 1)
+        columns_layout.setColumnStretch(0, 3)
+        columns_layout.setColumnStretch(1, 2)
+        return columns
+
     def _build_main_section(self) -> QWidget:
-        """Блок «Основное»: таблицы и круговые диаграммы долей."""
+        """Блок «Основное»: таблицы по классам сообщений и операторам."""
         box = QFrame(self)
         box.setObjectName("sectionCard")
         box.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -441,24 +543,8 @@ class DashboardPage(QWidget):
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
-        self._segment_chart = PieChart("Доли SMS-сегментов", box)
-        self._cost_chart = PieChart("Доли расходов", box)
-        self._operator_segment_chart = PieChart("Сегменты по операторам", box)
-        self._operator_cost_chart = PieChart("Счёт по операторам", box)
-
-        content = QGridLayout()
-        content.setHorizontalSpacing(16)
-        content.setVerticalSpacing(12)
-        content.addWidget(self._build_main_table(box), 0, 0)
-        content.addWidget(self._segment_chart, 0, 1)
-        content.addWidget(self._cost_chart, 0, 2)
-        content.addWidget(self._build_operator_section(box), 1, 0)
-        content.addWidget(self._operator_segment_chart, 1, 1)
-        content.addWidget(self._operator_cost_chart, 1, 2)
-        content.setColumnStretch(0, 6)
-        content.setColumnStretch(1, 2)
-        content.setColumnStretch(2, 2)
-        layout.addLayout(content)
+        layout.addWidget(self._sub_block(box, self._build_main_table(box)))
+        layout.addWidget(self._sub_block(box, self._build_operator_section(box)))
 
         hint = QLabel(
             "Доли и средняя стоимость считаются по SMS-сегментам, а не по сообщениям.",
