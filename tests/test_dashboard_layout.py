@@ -6,6 +6,7 @@ from mts_templates.application.dto import OperatorStatistics
 from mts_templates.domain.value_objects import Money, Operator
 from mts_templates.presentation.desktop.widgets.dashboard_page import (
     _operator_concentration,
+    _structure_pies_fit,
     _top_operators,
 )
 from mts_templates.presentation.desktop.widgets.share_bar import part_widths
@@ -28,6 +29,11 @@ def test_part_widths_ignore_negative_and_zero_total() -> None:
     assert part_widths((-5.0, 5.0), 100.0) == (0.0, 100.0)
     assert part_widths((0.0, 0.0), 100.0) == (0.0, 0.0)
     assert part_widths((1.0,), 0.0) == (0.0,)
+
+
+def test_structure_pies_fit_needs_room_for_structure_and_operators() -> None:
+    assert _structure_pies_fit(582, 320, 250, 12)
+    assert not _structure_pies_fit(581, 320, 250, 12)
 
 
 def test_top_operators_merges_the_rest() -> None:

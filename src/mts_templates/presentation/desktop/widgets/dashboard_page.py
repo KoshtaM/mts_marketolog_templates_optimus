@@ -12,7 +12,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from string import Template
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -74,6 +74,12 @@ from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, Backgr
 CHART_OPERATOR_LIMIT = 5
 DAILY_CHART_MIN_HEIGHT = 230
 OPERATOR_TOP = 6
+# Базовая минимальная высота круговой диаграммы абонентов: поднимается до
+# высоты соседних гистограмм, чтобы подблоки ряда были одной высоты.
+AUDIENCE_PIE_MIN_HEIGHT = 200
+# Минимальная высота ряда круговых диаграмм в «Структуре». Если правой колонке
+# не хватает места на этот ряд, «Структура» остаётся компактной с полосами.
+STRUCTURE_PIE_MIN_HEIGHT = 200
 
 # Шаблонированные SMS в диаграммах долей — «морская волна»: чистый зелёный
 # зарезервирован за корпоративным цветом МегаФона в диаграммах операторов.
@@ -369,6 +375,7 @@ class DashboardPage(QWidget):
         self._cells: dict[str, QLabel] = {}
         self._class_shares: dict[str, ShareMeter] = {}
         self._last_summary: DashboardSummary | None = None
+        self._structure_pies_visible = False
 
         self._batch_combo = QComboBox(self)
         self._batch_combo.setMinimumContentsLength(20)
@@ -390,6 +397,12 @@ class DashboardPage(QWidget):
         if self._last_summary is not None:
             self._show(self._last_summary)
         self.update()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Переключить «Структуру» между полосами и диаграммами по высоте колонки."""
+        if watched is self._right_column and event.type() == QEvent.Type.Resize:
+            self._update_structure_mode()
+        return super().eventFilter(watched, event)
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)
@@ -460,6 +473,8 @@ class DashboardPage(QWidget):
 
     def _switch_view(self, index: int) -> None:
         self._views.setCurrentIndex(index)
+        if index == 0:
+            QTimer.singleShot(0, self._update_structure_mode)
 
     def _build_overview(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
@@ -529,6 +544,11 @@ class DashboardPage(QWidget):
         operators = self._build_operator_section(right)
         right_layout.addWidget(structure)
         right_layout.addWidget(operators, stretch=1)
+        right_layout.setStretch(0, 0)
+        right_layout.setStretch(1, 1)
+        self._right_column = right
+        self._right_layout = right_layout
+        right.installEventFilter(self)
 
         grid.addWidget(left, 0, 0)
         grid.addWidget(right, 0, 1)
@@ -536,6 +556,55 @@ class DashboardPage(QWidget):
         grid.setColumnStretch(1, 2)
         grid.setRowStretch(0, 1)
         return container
+
+    def _update_structure_mode(self) -> None:
+        """Показать в «Структуре» круговые диаграммы, если колонка позволяет.
+
+        В компактном режиме «Структура» занимает высоту по содержимому, а
+        свободное место забирает таблица операторов. В расширенном — таблица
+        операторов фиксируется по содержимому, а «Структура» растягивается и
+        показывает две круговые диаграммы.
+        """
+        if self._right_column.height() <= 0:
+            return
+
+        structure = self._structure_box
+        pie_row = self._structure_pie_row
+        pie_height = max(pie_row.sizeHint().height(), STRUCTURE_PIE_MIN_HEIGHT)
+        share_height = self._share_chart.sizeHint().height()
+        if self._structure_pies_visible:
+            expanded = structure.sizeHint().height()
+            compact = max(expanded - pie_height + share_height, 0)
+        else:
+            compact = structure.sizeHint().height()
+            expanded = compact - share_height + pie_height
+
+        show_pies = _structure_pies_fit(
+            self._right_column.height(),
+            expanded,
+            self._operator_box.sizeHint().height(),
+            self._right_layout.spacing(),
+        )
+        if show_pies == self._structure_pies_visible:
+            return
+
+        self._structure_pies_visible = show_pies
+        self._share_chart.setVisible(not show_pies)
+        pie_row.setVisible(show_pies)
+        if show_pies:
+            structure.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+            self._operator_box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            self._right_layout.setStretch(0, 1)
+            self._right_layout.setStretch(1, 0)
+        else:
+            structure.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+            self._operator_box.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+            )
+            self._right_layout.setStretch(0, 0)
+            self._right_layout.setStretch(1, 1)
+        structure.updateGeometry()
+        self._operator_box.updateGeometry()
 
     def _section(self, title: str, hint: str = "") -> tuple[QFrame, QVBoxLayout, QLabel]:
         """Карточка раздела: заголовок, подпись справа и тело."""
@@ -610,13 +679,41 @@ class DashboardPage(QWidget):
         return box
 
     def _build_structure_section(self, parent: QWidget) -> QWidget:
-        """Доли SMS-сегментов и расходов по классам сообщений."""
+        """Доли SMS-сегментов и расходов по классам сообщений.
+
+        Компактный режим — горизонтальные полосы. Если в правой колонке есть
+        запас высоты, полосы заменяются двумя круговыми диаграммами: так
+        освободившееся под таблицей операторов место используется, а не
+        остаётся пустым.
+        """
         box, body, _hint = self._section("Структура", "доли SMS-сегментов и расходов")
         box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._structure_box = box
 
         self._share_chart = ShareBarChart(box)
         self._share_chart.setMinimumHeight(96)
         body.addWidget(self._share_chart)
+
+        self._structure_pie_row = QWidget(box)
+        self._structure_pie_row.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding
+        )
+        self._structure_pie_row.setMinimumHeight(STRUCTURE_PIE_MIN_HEIGHT)
+        self._structure_pie_row.setVisible(False)
+        pie_layout = QHBoxLayout(self._structure_pie_row)
+        pie_layout.setContentsMargins(0, 0, 0, 0)
+        pie_layout.setSpacing(12)
+        self._segment_share_pie = PieChart("Доли SMS-сегментов", self._structure_pie_row)
+        self._cost_share_pie = PieChart("Доли расходов", self._structure_pie_row)
+        pie_layout.addWidget(
+            self._sub_block(self._structure_pie_row, self._segment_share_pie, expanding=True),
+            stretch=1,
+        )
+        pie_layout.addWidget(
+            self._sub_block(self._structure_pie_row, self._cost_share_pie, expanding=True),
+            stretch=1,
+        )
+        body.addWidget(self._structure_pie_row, stretch=1)
 
         self._structure_insight = QLabel("", box)
         self._structure_insight.setObjectName("insightLine")
@@ -631,6 +728,7 @@ class DashboardPage(QWidget):
             "Операторы получателя", "доля — от сообщений"
         )
         box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self._operator_box = box
 
         self._operator_rows = QGridLayout()
         self._operator_rows.setContentsMargins(0, 0, 0, 0)
@@ -647,12 +745,12 @@ class DashboardPage(QWidget):
                 column, 1 if column < len(OPERATOR_COLUMNS) - 1 else 0
             )
         body.addLayout(self._operator_rows)
-        body.addStretch(1)
 
         self._operator_insight = QLabel("", box)
         self._operator_insight.setObjectName("insightLine")
         self._operator_insight.setWordWrap(True)
         body.addWidget(self._operator_insight)
+        body.addStretch(1)
         return box
 
     def _build_audience(self, parent: QWidget) -> QWidget:
@@ -667,7 +765,7 @@ class DashboardPage(QWidget):
         box, body, _hint = self._section(
             "Распределения", "абоненты и сообщения по числу SMS-сегментов"
         )
-        box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self._subscriber_segment_chart = DistributionChart("Абоненты по числу сегментов", box)
         self._subscriber_operator_chart = PieChart("Абоненты по операторам", box)
@@ -685,7 +783,7 @@ class DashboardPage(QWidget):
         charts.addWidget(self._sub_block(box, self._message_segment_chart), 0, 2)
         for column in range(3):
             charts.setColumnStretch(column, 1)
-        body.addLayout(charts, stretch=1)
+        body.addLayout(charts)
 
         hint = QLabel(
             "Абонент — уникальный номер получателя с отправленными сегментами; "
@@ -697,7 +795,8 @@ class DashboardPage(QWidget):
         hint.setWordWrap(True)
         body.addWidget(hint)
 
-        layout.addWidget(box, stretch=1)
+        layout.addWidget(box)
+        layout.addStretch(1)
         return page
 
     def _build_subscriber_cards(self, parent: QWidget) -> QWidget:
@@ -720,15 +819,30 @@ class DashboardPage(QWidget):
             self._cards[key] = card
         return container
 
-    def _sub_block(self, parent: QWidget, content: QWidget) -> QFrame:
-        """Подблок секции: скруглённая карточка с отдельным фоном."""
+    def _sub_block(
+        self,
+        parent: QWidget,
+        content: QWidget,
+        *,
+        expanding: bool = False,
+    ) -> QFrame:
+        """Подблок секции: скруглённая карточка с отдельным фоном.
+
+        По умолчанию высота подблока равна содержимому: так диаграммы
+        распределений не растягиваются на весь экран. `expanding=True` —
+        для подблоков, которые должны занять свободную высоту секции.
+        """
         frame = QFrame(parent)
         frame.setObjectName("subBlock")
         frame.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        frame.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding if expanding else QSizePolicy.Policy.Fixed,
+        )
         frame_layout = QVBoxLayout(frame)
         frame_layout.setContentsMargins(12, 10, 12, 10)
         frame_layout.setSpacing(6)
-        frame_layout.addWidget(content)
+        frame_layout.addWidget(content, stretch=1 if expanding else 0)
         return frame
 
     def _build_warnings_section(self, parent: QWidget) -> QWidget:
@@ -826,6 +940,7 @@ class DashboardPage(QWidget):
         self._fill_daily(summary.daily_segments)
         self._fill_additional(summary.segmentation)
         self._set_warnings(summary.warnings)
+        QTimer.singleShot(0, self._update_structure_mode)
 
     def _fill_cards(self, summary: DashboardSummary) -> None:
         statistics = summary.statistics
@@ -941,6 +1056,26 @@ class DashboardPage(QWidget):
                 ),
             )
         )
+        self._segment_share_pie.set_slices(
+            (
+                PieSlice("Обычные", float(statistics.ordinary_segments), palette.negative),
+                PieSlice(
+                    "Шаблонированные",
+                    float(statistics.templated_segments),
+                    TEMPLATED_CHART_COLOR,
+                ),
+            )
+        )
+        self._cost_share_pie.set_slices(
+            (
+                PieSlice("Обычные", float(statistics.ordinary_cost.amount), palette.negative),
+                PieSlice(
+                    "Шаблонированные",
+                    float(statistics.templated_cost.amount),
+                    TEMPLATED_CHART_COLOR,
+                ),
+            )
+        )
         self._fill_structure_insight(statistics)
 
     def _fill_structure_insight(self, statistics: BatchStatistics) -> None:
@@ -1003,6 +1138,13 @@ class DashboardPage(QWidget):
             group_buckets(segmentation.messages_by_segments),
             caption=f"всего {format_int(segmentation.subscriber_messages)}",
         )
+        self._subscriber_operator_chart.setMinimumHeight(
+            max(
+                AUDIENCE_PIE_MIN_HEIGHT,
+                self._subscriber_segment_chart.minimumHeight(),
+                self._message_segment_chart.minimumHeight(),
+            )
+        )
         self._subscriber_operator_chart.set_slices(
             _subscriber_operator_slices(segmentation.subscribers_by_operator)
         )
@@ -1012,6 +1154,7 @@ class DashboardPage(QWidget):
             self._cards[key].reset()
         self._subscriber_segment_chart.set_bars(())
         self._message_segment_chart.set_bars(())
+        self._subscriber_operator_chart.setMinimumHeight(AUDIENCE_PIE_MIN_HEIGHT)
         self._subscriber_operator_chart.set_slices(())
 
     def _fill_empty(self, summary: DashboardSummary | None = None) -> None:
@@ -1023,6 +1166,8 @@ class DashboardPage(QWidget):
         for meter in self._class_shares.values():
             meter.set_share(0.0)
         self._share_chart.set_rows(())
+        self._segment_share_pie.set_slices(())
+        self._cost_share_pie.set_slices(())
         self._structure_insight.setText("Средняя цена сегмента: —")
         self._fill_operators(())
         self._fill_daily(())
@@ -1032,6 +1177,7 @@ class DashboardPage(QWidget):
         self._batch_label.setText("Статистика ещё не импортирована.")
         warnings = summary.warnings if summary is not None else ()
         self._set_warnings(warnings)
+        QTimer.singleShot(0, self._update_structure_mode)
 
     def _fill_operators(self, operators: Sequence[OperatorStatistics]) -> None:
         """Заполнить таблицу операторов: топ по сообщениям плюс «Другие»."""
@@ -1102,6 +1248,16 @@ class DashboardPage(QWidget):
 
 
 _OTHER_OPERATOR = "Другие"
+
+
+def _structure_pies_fit(
+    available_height: int,
+    expanded_structure: int,
+    operators: int,
+    spacing: int,
+) -> bool:
+    """Хватает ли высоты правой колонки на две круговые диаграммы."""
+    return available_height >= expanded_structure + operators + spacing
 
 
 def _operator_concentration(operators: Sequence[OperatorStatistics]) -> str:
