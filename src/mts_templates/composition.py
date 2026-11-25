@@ -18,6 +18,7 @@ from mts_templates.application.use_cases.import_templates import (
     PreviewTemplateFile,
 )
 from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
+from mts_templates.application.use_cases.list_templates import ListTemplates
 from mts_templates.domain.tariffs.models import TariffCatalog
 from mts_templates.infrastructure.config import TomlSettingsStore, load_settings
 from mts_templates.infrastructure.excel.report_writer import ExcelReportWriter
@@ -53,6 +54,7 @@ class Container:
     analyze_templates: AnalyzeTemplates
     find_candidates: FindCandidates
     matched_messages: ListMatchedMessages
+    list_templates: ListTemplates
     list_batches: ListBatches
     dashboard: GetDashboardSummary
     export_report: ExportReport
@@ -122,6 +124,7 @@ def build_container(
         analyze_templates=analyzer,
         find_candidates=FindCandidates(analyzer),
         matched_messages=ListMatchedMessages(messages, templates, config_provider),
+        list_templates=ListTemplates(templates),
         list_batches=ListBatches(imports),
         dashboard=GetDashboardSummary(imports, messages, templates, analysis),
         export_report=ExportReport(

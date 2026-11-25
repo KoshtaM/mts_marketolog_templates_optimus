@@ -403,7 +403,7 @@ class DashboardPage(QWidget):
         """Переключить «Структуру» между полосами и диаграммами по высоте колонки."""
         if watched is self._right_column and event.type() == QEvent.Type.Resize:
             self._update_structure_mode()
-        return super().eventFilter(watched, event)
+        return bool(super().eventFilter(watched, event))
 
     def _build(self) -> None:
         outer = QVBoxLayout(self)

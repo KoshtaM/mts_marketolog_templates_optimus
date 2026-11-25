@@ -77,4 +77,4 @@ class BenefitTotal(QFrame):
         self.set_value("—", neutral_color())
 
     def caption(self) -> str:
-        return self._caption.text()
+        return str(self._caption.text())

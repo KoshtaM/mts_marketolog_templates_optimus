@@ -41,7 +41,7 @@ def main() -> int:
     window.show()
 
     try:
-        return app.exec()
+        return int(app.exec())
     except Exception:
         logger.exception("Непредвиденная ошибка приложения")
         traceback.print_exc()
