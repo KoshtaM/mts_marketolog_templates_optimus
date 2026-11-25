@@ -74,9 +74,10 @@ from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, Backgr
 CHART_OPERATOR_LIMIT = 5
 DAILY_CHART_MIN_HEIGHT = 230
 OPERATOR_TOP = 6
-# Базовая минимальная высота круговой диаграммы абонентов: поднимается до
-# высоты соседних гистограмм, чтобы подблоки ряда были одной высоты.
-AUDIENCE_PIE_MIN_HEIGHT = 200
+# Минимальные размеры диаграмм вкладки «Абоненты»: все три подблока ряда
+# выравниваются по общим ширине и высоте, поэтому имеют один размер.
+AUDIENCE_CHART_MIN_HEIGHT = 200
+AUDIENCE_CHART_MIN_WIDTH = 260
 # Минимальная высота ряда круговых диаграмм в «Структуре». Если правой колонке
 # не хватает места на этот ряд, «Структура» остаётся компактной с полосами.
 STRUCTURE_PIE_MIN_HEIGHT = 200
@@ -425,7 +426,8 @@ class DashboardPage(QWidget):
         self._views.addWidget(self._overview)
         self._views.addWidget(self._audience)
         layout.addWidget(self._views, stretch=1)
-        layout.addWidget(self._build_warnings_section(content))
+        self._warnings_card = self._build_warnings_section(content)
+        self._place_warnings(0)
 
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
@@ -473,14 +475,28 @@ class DashboardPage(QWidget):
 
     def _switch_view(self, index: int) -> None:
         self._views.setCurrentIndex(index)
+        self._place_warnings(index)
         if index == 0:
             QTimer.singleShot(0, self._update_structure_mode)
+
+    def _place_warnings(self, index: int) -> None:
+        """Панель предупреждений живёт в конце текущего вида.
+
+        На «Обзоре» она идёт после колонок и прижата к низу. На «Абонентах» —
+        сразу за распределениями; оставшееся место уходит под неё, а не между
+        блоками.
+        """
+        if index == 0:
+            self._overview_layout.addWidget(self._warnings_card)
+            return
+        self._audience_layout.insertWidget(self._audience_layout.count() - 1, self._warnings_card)
 
     def _build_overview(self, parent: QWidget) -> QWidget:
         page = QWidget(parent)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
+        self._overview_layout = layout
 
         layout.addWidget(self._build_cards(page))
 
@@ -759,6 +775,7 @@ class DashboardPage(QWidget):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
+        self._audience_layout = layout
 
         layout.addWidget(self._build_subscriber_cards(page))
 
@@ -768,12 +785,16 @@ class DashboardPage(QWidget):
         box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self._subscriber_segment_chart = DistributionChart("Абоненты по числу сегментов", box)
-        self._subscriber_operator_chart = PieChart("Абоненты по операторам", box)
+        self._subscriber_operator_chart = PieChart(
+            "Абоненты по операторам", box, diameter_ratio=1.0
+        )
         self._message_segment_chart = DistributionChart(
             "Сообщения по числу сегментов",
             box,
             exact_gradient=DARK_MUSTARD_GRADIENT,
         )
+        for chart in self._audience_charts():
+            chart.setMinimumWidth(AUDIENCE_CHART_MIN_WIDTH)
 
         charts = QGridLayout()
         charts.setHorizontalSpacing(12)
@@ -850,6 +871,7 @@ class DashboardPage(QWidget):
         box = QFrame(parent)
         box.setObjectName("warningsCard")
         box.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        box.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         layout = QVBoxLayout(box)
         layout.setContentsMargins(14, 8, 14, 10)
@@ -1138,24 +1160,39 @@ class DashboardPage(QWidget):
             group_buckets(segmentation.messages_by_segments),
             caption=f"всего {format_int(segmentation.subscriber_messages)}",
         )
-        self._subscriber_operator_chart.setMinimumHeight(
-            max(
-                AUDIENCE_PIE_MIN_HEIGHT,
-                self._subscriber_segment_chart.minimumHeight(),
-                self._message_segment_chart.minimumHeight(),
-            )
-        )
         self._subscriber_operator_chart.set_slices(
             _subscriber_operator_slices(segmentation.subscribers_by_operator)
         )
+        self._sync_audience_chart_heights()
 
     def _fill_additional_empty(self) -> None:
         for key in ("subscribers", "subscriber_segments", "subscriber_messages"):
             self._cards[key].reset()
         self._subscriber_segment_chart.set_bars(())
         self._message_segment_chart.set_bars(())
-        self._subscriber_operator_chart.setMinimumHeight(AUDIENCE_PIE_MIN_HEIGHT)
         self._subscriber_operator_chart.set_slices(())
+        self._sync_audience_chart_heights()
+
+    def _audience_charts(self) -> tuple[QWidget, ...]:
+        return (
+            self._subscriber_segment_chart,
+            self._subscriber_operator_chart,
+            self._message_segment_chart,
+        )
+
+    def _sync_audience_chart_heights(self) -> None:
+        """Выровнять подблоки распределений по общей высоте.
+
+        Высоту задаёт гистограммы: их минимум пересчитывается при каждой загрузке,
+        а круговая диаграмма подстраивается под них.
+        """
+        height = max(
+            AUDIENCE_CHART_MIN_HEIGHT,
+            self._subscriber_segment_chart.minimumHeight(),
+            self._message_segment_chart.minimumHeight(),
+        )
+        for chart in self._audience_charts():
+            chart.setMinimumHeight(height)
 
     def _fill_empty(self, summary: DashboardSummary | None = None) -> None:
         self._last_summary = summary

@@ -12,7 +12,10 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 from mts_templates.presentation.desktop.theme import active_palette
 
 PIE_DIAMETER_RATIO = 1.5
-"""Диаметр круговой диаграммы: задаётся как значение × `PIE_DIAMETER_RATIO` (в 1,5 раза меньше)."""
+"""Делитель доступного диаметра: круг занимает 1/1,5 места, оставляя запас.
+
+`diameter_ratio=1.0` — максимальный круг, который помещается над легендой.
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,10 +30,18 @@ class PieSlice:
 class PieChart(QWidget):
     """Показывает доли значений; нулевые и отрицательные сектора игнорируются."""
 
-    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        title: str,
+        parent: QWidget | None = None,
+        *,
+        diameter_ratio: float = PIE_DIAMETER_RATIO,
+    ) -> None:
         super().__init__(parent)
         self._title = title
         self._slices: tuple[PieSlice, ...] = ()
+        # Меньше 1,0 круг вышел бы за область над легендой.
+        self._diameter_ratio = max(1.0, diameter_ratio)
         self.setMinimumSize(150, 200)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -56,7 +67,7 @@ class PieChart(QWidget):
         legend_height = legend_rows * 16 + 6
         pie_size = (
             max(40.0, min(content.width() - 6, content.height() - legend_height - 6))
-            / PIE_DIAMETER_RATIO
+            / self._diameter_ratio
         )
         pie_rect = QRectF(
             content.x() + (content.width() - pie_size) / 2,
