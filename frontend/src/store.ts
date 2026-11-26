@@ -2,6 +2,7 @@ import { computed, reactive } from 'vue'
 import { ApiError, api } from './api'
 import { applyTheme } from './theme'
 import type {
+  ActionCenter,
   Analysis,
   AppSettings,
   DashboardSummary,
@@ -25,6 +26,8 @@ interface State {
   dashboard: DashboardSummary | null
   analysis: Analysis | null
   analysisBatchId: string
+  actionCenter: ActionCenter | null
+  actionCenterBatchId: string
   templates: SmsTemplate[]
 }
 
@@ -40,6 +43,8 @@ export const state = reactive<State>({
   dashboard: null,
   analysis: null,
   analysisBatchId: '',
+  actionCenter: null,
+  actionCenterBatchId: '',
   templates: [],
 })
 
@@ -139,6 +144,10 @@ export async function loadDashboard(batchId = state.batchId): Promise<void> {
       state.analysis = null
       state.analysisBatchId = ''
     }
+    if (state.actionCenter && state.actionCenterBatchId !== batchId) {
+      state.actionCenter = null
+      state.actionCenterBatchId = ''
+    }
   } catch (error) {
     reportError(error)
   }
@@ -154,6 +163,8 @@ export async function refreshAll(): Promise<void> {
     state.dashboard = dashboard
     state.analysis = null
     state.analysisBatchId = ''
+    state.actionCenter = null
+    state.actionCenterBatchId = ''
     if (state.batchId && !state.batches.some((item) => item.id === state.batchId)) {
       state.batchId = state.batches[0]?.id ?? ''
     }
@@ -165,6 +176,8 @@ export async function selectBatch(batchId: string): Promise<void> {
   if (batchId === state.batchId) return
   state.analysis = null
   state.analysisBatchId = ''
+  state.actionCenter = null
+  state.actionCenterBatchId = ''
   await loadDashboard(batchId)
 }
 
@@ -196,6 +209,25 @@ export async function analyze(force = false): Promise<Analysis | null> {
   }
 }
 
+export async function loadActionCenter(force = false): Promise<ActionCenter | null> {
+  if (!state.batchId) return null
+  if (!force && state.actionCenter && state.actionCenterBatchId === state.batchId) {
+    return state.actionCenter
+  }
+  try {
+    const center = await withBusy(
+      force ? 'Пересчёт центра действий…' : 'Собираем центр действий…',
+      () => api.actionCenter(state.batchId, force),
+    )
+    state.actionCenter = center
+    state.actionCenterBatchId = state.batchId
+    return center
+  } catch (error) {
+    reportError(error)
+    return null
+  }
+}
+
 export async function saveSettings(changes: Partial<AppSettings>): Promise<AppSettings | null> {
   try {
     const settings = await withBusy('Сохранение настроек…', () => api.updateSettings(changes))
@@ -203,6 +235,8 @@ export async function saveSettings(changes: Partial<AppSettings>): Promise<AppSe
     applyTheme(currentTheme.value)
     state.analysis = null
     state.analysisBatchId = ''
+    state.actionCenter = null
+    state.actionCenterBatchId = ''
     return settings
   } catch (error) {
     reportError(error)

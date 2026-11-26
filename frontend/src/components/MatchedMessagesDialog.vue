@@ -4,13 +4,18 @@ import { api } from '../api'
 import { dateTime, integer } from '../format'
 import type { MatchedMessage } from '../types'
 
-const props = defineProps<{
-  batchId: string
-  targetType: 'template' | 'candidate'
-  targetId: string
-  heading: string
-  text: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    batchId: string
+    targetType: 'template' | 'candidate' | 'unmatched'
+    targetId: string
+    heading: string
+    text: string
+    operator?: string | null
+    untriggeredOnly?: boolean
+  }>(),
+  { operator: null, untriggeredOnly: false },
+)
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -25,8 +30,13 @@ async function load(): Promise<void> {
   try {
     const response =
       props.targetType === 'template'
-        ? await api.matchedTemplateMessages(props.batchId, props.targetId)
-        : await api.matchedCandidateMessages(props.batchId, props.targetId)
+        ? await api.matchedTemplateMessages(props.batchId, props.targetId, {
+            operator: props.operator,
+            untriggered: props.untriggeredOnly,
+          })
+        : props.targetType === 'candidate'
+          ? await api.matchedCandidateMessages(props.batchId, props.targetId)
+          : await api.unmatchedTemplatedMessages(props.batchId)
     messages.value = response.messages
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : 'Не удалось загрузить сообщения'
@@ -84,7 +94,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <div class="modal-body">
-        <div class="modal-text">{{ text }}</div>
+        <div v-if="text" class="modal-text">{{ text }}</div>
 
         <div v-if="loading" class="empty">
           <div class="spinner" style="margin: 0 auto 10px"></div>

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
@@ -101,6 +101,13 @@ class AnalysisRun:
     operator_triggers: tuple[OperatorTrigger, ...] = ()
     daily_segments: tuple[DaySegments, ...] = ()
     daily_templated_segments: tuple[DaySegments, ...] = ()
+    # Наблюдаемые ставки периода: по ним центр действий оценивает потери.
+    observed_ordinary_rate: Money | None = None
+    observed_templated_rate: Money | None = None
+    # Сообщения, оплаченные как шаблонированные, но не сопоставленные шаблону.
+    unmatched_templated_messages: int = 0
+    unmatched_templated_segments: int = 0
+    unmatched_templated_cost: Money = field(default_factory=Money.zero)
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -113,6 +120,8 @@ class AnalysisRun:
             raise ValueError("Счётчики сообщений не могут быть отрицательными")
         if self.matched_message_count > self.message_count:
             raise ValueError("Сопоставленных сообщений больше, чем всего")
+        if self.unmatched_templated_messages < 0 or self.unmatched_templated_segments < 0:
+            raise ValueError("Счётчики шаблонированных без шаблона не могут быть отрицательными")
         ensure_unique_days(self.daily_segments)
         ensure_unique_days(self.daily_templated_segments)
         template_ids = [metrics.template_id for metrics in self.metrics]

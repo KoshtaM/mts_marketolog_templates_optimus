@@ -29,7 +29,7 @@ def test_migrate_creates_schema(tmp_path: Path) -> None:
     assert tables >= EXPECTED_TABLES
 
     versions = [row["version"] for row in db.fetchall("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     db.close()
 
@@ -40,7 +40,7 @@ def test_migrate_is_idempotent(tmp_path: Path) -> None:
     db.migrate()
 
     versions = [row["version"] for row in db.fetchall("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     db.close()
 

@@ -57,6 +57,7 @@ BENEFIT_FORMULA_VERSION = 2
 SEGMENTATION_VERSION = 2
 CANDIDATE_TEXT_VERSION = 2
 DAILY_SERIES_VERSION = 2
+ACTION_CENTER_VERSION = 2
 
 
 def compute_config_hash(
@@ -72,6 +73,7 @@ def compute_config_hash(
         "segmentation": SEGMENTATION_VERSION,
         "candidate_text": CANDIDATE_TEXT_VERSION,
         "daily_series": DAILY_SERIES_VERSION,
+        "action_center": ACTION_CENTER_VERSION,
         "delivered_only": config.delivered_only,
         "min_support": config.min_support,
         "min_cluster_segments": config.min_cluster_segments,
@@ -144,6 +146,8 @@ def compute_analysis(
     untriggered_matches = 0
     untriggered_off_operator = 0
     unmatched_templated = 0
+    unmatched_templated_segments = 0
+    unmatched_templated_cost = Money.zero()
     message_count = 0
     candidate_messages: list[SmsMessage] = []
     daily_totals: dict[date, int] = {}
@@ -180,6 +184,8 @@ def compute_analysis(
 
         if message.message_class is MessageClass.TEMPLATED:
             unmatched_templated += 1
+            unmatched_templated_segments += message.segments
+            unmatched_templated_cost = unmatched_templated_cost + message.cost
         if is_candidate_message(message, delivered_only=config.delivered_only):
             candidate_messages.append(message)
 
@@ -241,6 +247,11 @@ def compute_analysis(
             DaySegments(day=day, segments=segments)
             for day, segments in sorted(daily_templated.items())
         ),
+        observed_ordinary_rate=observed.average_for(MessageClass.ORDINARY),
+        observed_templated_rate=observed.average_for(MessageClass.TEMPLATED),
+        unmatched_templated_messages=unmatched_templated,
+        unmatched_templated_segments=unmatched_templated_segments,
+        unmatched_templated_cost=unmatched_templated_cost,
     )
 
 

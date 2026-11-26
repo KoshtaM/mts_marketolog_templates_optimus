@@ -6,11 +6,14 @@ from collections.abc import Sequence
 from decimal import ROUND_HALF_UP, Decimal
 
 from mts_templates.application.dto import (
+    ActionCenterView,
+    ActionItemView,
     AnalysisView,
     CandidateView,
     OperatorTriggerView,
     TemplateMetricsView,
 )
+from mts_templates.domain.analytics.actions import ActionCenter
 from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.domain.analytics.analysis import (
     PARTIAL_PERIOD_DAYS,
@@ -159,3 +162,50 @@ def _operator_trigger_views(
             )
         )
     return tuple(views)
+
+
+def to_action_center_view(
+    center: ActionCenter,
+    run: AnalysisRun,
+) -> ActionCenterView:
+    """Собрать представление центра действий, дополнив его предупреждениями прогона."""
+    warnings = tuple(dict.fromkeys((*center.warnings, *run.warnings)))
+    items = tuple(
+        ActionItemView(
+            key=item.key,
+            kind=item.kind.value,
+            severity=item.severity,
+            title=item.title,
+            subject=item.subject,
+            template_id=item.template_id,
+            template_name=item.template_name,
+            operator=item.operator,
+            detail=item.detail,
+            recommendation=item.recommendation,
+            monthly_loss=item.monthly_loss,
+            messages=item.messages,
+            segments=item.segments,
+            drill_down=item.drill_down.value if item.drill_down is not None else None,
+        )
+        for item in center.items
+    )
+    return ActionCenterView(
+        batch_id=run.batch_id,
+        period_from=center.period.start,
+        period_to=center.period.end,
+        is_partial_period=center.period.days < PARTIAL_PERIOD_DAYS,
+        monthly_factor=float(center.monthly_factor),
+        total_monthly_loss=center.total_monthly_loss,
+        loss_templates=center.loss_templates,
+        off_operator_loss=center.off_operator_loss,
+        untriggered_loss=center.untriggered_loss,
+        off_operator_messages=center.off_operator_messages,
+        untriggered_messages=center.untriggered_messages,
+        unmatched_templated_messages=center.unmatched_templated_messages,
+        unmatched_templated_segments=center.unmatched_templated_segments,
+        unmatched_templated_cost=center.unmatched_templated_cost,
+        observed_ordinary_rate=center.observed_ordinary_rate,
+        observed_templated_rate=center.observed_templated_rate,
+        items=items,
+        warnings=warnings,
+    )

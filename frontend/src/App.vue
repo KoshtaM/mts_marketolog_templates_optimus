@@ -9,6 +9,7 @@ onMounted(() => {
 
 const navigation = [
   { to: '/', label: 'Дашборд', icon: '▦' },
+  { to: '/actions', label: 'Центр действий', icon: '⚑' },
   { to: '/templates', label: 'Шаблоны', icon: '✉' },
   { to: '/candidates', label: 'Кандидаты', icon: '✦' },
   { to: '/import', label: 'Импорт', icon: '⇣' },

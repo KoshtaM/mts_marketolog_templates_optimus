@@ -11,8 +11,13 @@ from fastapi.testclient import TestClient
 from mts_templates.composition import Container, build_container
 from mts_templates.infrastructure.config import load_settings
 from mts_templates.presentation.api.app import create_app
-from tests.fixtures import write_statistics_xlsx, write_templates_xlsx
-from tests.test_analysis_integration import statistics_rows, template_rows
+from tests.fixtures import TEMPLATE_HEADERS, write_statistics_xlsx, write_templates_xlsx
+from tests.test_analysis_integration import (
+    ORDINARY_PACKAGE,
+    TEMPLATED_PACKAGE,
+    statistics_rows,
+    template_rows,
+)
 
 XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -166,6 +171,107 @@ def test_analysis_uses_cache(client: TestClient, tmp_path: Path) -> None:
     first = client.post("/api/analysis", json=body).json()
     second = client.post("/api/analysis", json=body).json()
     assert first["run_id"] == second["run_id"]
+
+
+def test_action_center_and_drill_down(client: TestClient, tmp_path: Path) -> None:
+    rows = statistics_rows()
+    rows.append(
+        {
+            "ID сообщения": "B1",
+            "Имя отправителя": "TEST",
+            "Номер получателя": "79000000001",
+            "Оператор получателя": "Beeline",
+            "Дата попытки отправки": "2026-11-03T10:00:00+03:00",
+            "Статус отправки": "Отправлено",
+            "Статус доставки СМС или ММС": "Успешная доставка",
+            "Текст сообщения": "Ваш код 3333",
+            "Цена за один сегмент": 10,
+            "Стоимость": 10,
+            "Количество сегментов в sms": 1,
+            "Тип пакета": ORDINARY_PACKAGE,
+            "Канал": "SMS",
+            "Количество sms в пакете при покупке": 999999999,
+        }
+    )
+    rows.append(
+        {
+            "ID сообщения": "U1",
+            "Имя отправителя": "TEST",
+            "Номер получателя": "79000000002",
+            "Оператор получателя": "MTS",
+            "Дата попытки отправки": "2026-11-04T10:00:00+03:00",
+            "Статус отправки": "Отправлено",
+            "Статус доставки СМС или ММС": "Успешная доставка",
+            "Текст сообщения": "Оплачено как шаблон без шаблона",
+            "Цена за один сегмент": 5,
+            "Стоимость": 5,
+            "Количество сегментов в sms": 1,
+            "Тип пакета": TEMPLATED_PACKAGE,
+            "Канал": "SMS",
+            "Количество sms в пакете при покупке": 999999999,
+        }
+    )
+
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", rows)
+    report = _upload(client, statistics, "/api/imports/statistics")
+    batch_id = str(report["batch"]["id"])
+
+    templates = template_rows()
+    templates[0]["Операторы"] = "МТС"
+    templates_path = write_templates_xlsx(
+        tmp_path / "templates.xlsx",
+        templates,
+        headers=(*TEMPLATE_HEADERS, "Операторы"),
+    )
+    preview = _upload(client, templates_path, "/api/imports/templates/preview")
+    imported = client.post(
+        "/api/imports/templates",
+        data={"upload_id": str(preview["upload_id"])},
+    )
+    assert imported.status_code == 200, imported.text
+
+    response = client.get("/api/action-center", params={"batch_id": batch_id})
+    assert response.status_code == 200, response.text
+    center = response.json()
+
+    assert center["loss_templates"] == 1
+    assert center["off_operator_messages"] == 1
+    assert center["off_operator_loss"] == "5.67"
+    assert center["unmatched_templated_messages"] == 1
+    assert center["unmatched_templated_segments"] == 1
+    assert center["unmatched_templated_cost"] == "5.00"
+    assert center["total_monthly_loss"] == "1994.37"
+    assert center["observed_templated_rate"] == "4.33"
+    assert [item["kind"] for item in center["items"]] == [
+        "loss_template",
+        "off_operator",
+        "unmatched_templated",
+    ]
+
+    loss_item, operator_item, unmatched_item = center["items"]
+    assert loss_item["severity"] == 1
+    assert loss_item["monthly_loss"] == "1988.70"
+    assert loss_item["drill_down"] == "template"
+    assert operator_item["operator"] == "Beeline"
+    assert operator_item["monthly_loss"] == "5.67"
+    assert unmatched_item["severity"] == 0
+    assert unmatched_item["monthly_loss"] == "0.00"
+    assert unmatched_item["drill_down"] == "unmatched_templated"
+
+    template_messages = client.get(
+        f"/api/matched-messages/template/{loss_item['template_id']}",
+        params={"batch_id": batch_id, "operator": "Beeline", "untriggered": "true"},
+    ).json()["messages"]
+    assert len(template_messages) == 1
+    assert template_messages[0]["operator"] == "Beeline"
+    assert template_messages[0]["text"] == "Ваш код 3333"
+
+    unmatched_messages = client.get(
+        "/api/matched-messages/unmatched-templated",
+        params={"batch_id": batch_id},
+    ).json()["messages"]
+    assert len(unmatched_messages) == 1
+    assert unmatched_messages[0]["text"] == "Оплачено как шаблон без шаблона"
 
 
 def test_settings_update(client: TestClient) -> None:

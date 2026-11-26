@@ -268,6 +268,52 @@ export interface MatchedMessage {
   delivery_status: string
 }
 
+export type ActionKind =
+  | 'loss_template'
+  | 'off_operator'
+  | 'untriggered'
+  | 'unmatched_templated'
+
+export type ActionDrillDown = 'template' | 'unmatched_templated'
+
+export interface ActionItem {
+  key: string
+  kind: ActionKind
+  severity: number
+  title: string
+  subject: string
+  template_id: string | null
+  template_name: string
+  operator: string | null
+  detail: string
+  recommendation: string
+  monthly_loss: string
+  messages: number
+  segments: number
+  drill_down: ActionDrillDown | null
+}
+
+export interface ActionCenter {
+  batch_id: string
+  period_from: string | null
+  period_to: string | null
+  is_partial_period: boolean
+  monthly_factor: number
+  total_monthly_loss: string
+  loss_templates: number
+  off_operator_loss: string
+  untriggered_loss: string
+  off_operator_messages: number
+  untriggered_messages: number
+  unmatched_templated_messages: number
+  unmatched_templated_segments: number
+  unmatched_templated_cost: string
+  observed_ordinary_rate: string | null
+  observed_templated_rate: string | null
+  items: ActionItem[]
+  warnings: string[]
+}
+
 export interface BenefitThresholds {
   levels: number[]
 }

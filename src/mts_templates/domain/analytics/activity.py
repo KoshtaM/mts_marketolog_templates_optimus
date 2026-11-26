@@ -24,7 +24,11 @@ class DaySegments:
 
 @dataclass(frozen=True, slots=True)
 class OperatorTrigger:
-    """Сообщения, подпавшие под шаблон, у одного оператора получателя."""
+    """Сообщения, подпавшие под шаблон, у одного оператора получателя.
+
+    `untriggered_*` — часть подпавших сообщений, оплаченных как обычные:
+    они нужны центру действий, чтобы оценить потери по оператору.
+    """
 
     template_id: str
     operator: Operator
@@ -32,6 +36,9 @@ class OperatorTrigger:
     matched_messages: int
     triggered_messages: int
     matched_segments: int = 0
+    untriggered_messages: int = 0
+    untriggered_segments: int = 0
+    untriggered_cost: Money = field(default_factory=Money.zero)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +64,11 @@ class TemplateMetrics:
     trigger_rate: Decimal
     active: bool
     daily_segments: tuple[DaySegments, ...] = ()
+    # Подпали под шаблон, но оплачены как обычные: деньги, которые теряются
+    # из-за оператора вне списка шаблона или несрабатывания тарификации.
+    untriggered_messages: int = 0
+    untriggered_segments: int = 0
+    untriggered_cost: Money = field(default_factory=Money.zero)
 
     def __post_init__(self) -> None:
         ensure_unique_days(self.daily_segments)
@@ -68,6 +80,9 @@ class _OperatorCounts:
     matched: int = 0
     matched_segments: int = 0
     triggered: int = 0
+    untriggered: int = 0
+    untriggered_segments: int = 0
+    untriggered_cost: Money = field(default_factory=Money.zero)
 
 
 @dataclass(slots=True)
@@ -85,6 +100,9 @@ class TemplateActivity:
     off_operator_messages: int = 0
     actual_cost: Money = field(default_factory=Money.zero)
     baseline_cost: Money = field(default_factory=Money.zero)
+    untriggered_messages: int = 0
+    untriggered_segments: int = 0
+    untriggered_cost: Money = field(default_factory=Money.zero)
     recipients: set[str] = field(default_factory=set)
     by_operator: dict[Operator, _OperatorCounts] = field(default_factory=dict)
     daily: dict[date, int] = field(default_factory=dict)
@@ -97,8 +115,6 @@ class TemplateActivity:
         self.recipients.add(message.recipient)
         day = message.sent_at.date()
         self.daily[day] = self.daily.get(day, 0) + message.segments
-        if not operator_listed:
-            self.off_operator_messages += 1
 
         counts = self.by_operator.setdefault(
             message.operator, _OperatorCounts(listed=operator_listed)
@@ -110,6 +126,16 @@ class TemplateActivity:
             self.triggered_messages += 1
             self.actual_cost = self.actual_cost + message.cost
             self.baseline_cost = self.baseline_cost + baseline_cost
+            return
+
+        self.untriggered_messages += 1
+        self.untriggered_segments += message.segments
+        self.untriggered_cost = self.untriggered_cost + message.cost
+        counts.untriggered += 1
+        counts.untriggered_segments += message.segments
+        counts.untriggered_cost = counts.untriggered_cost + message.cost
+        if not operator_listed:
+            self.off_operator_messages += 1
 
     def operator_triggers(self) -> tuple[OperatorTrigger, ...]:
         return tuple(
@@ -120,6 +146,9 @@ class TemplateActivity:
                 matched_messages=counts.matched,
                 triggered_messages=counts.triggered,
                 matched_segments=counts.matched_segments,
+                untriggered_messages=counts.untriggered,
+                untriggered_segments=counts.untriggered_segments,
+                untriggered_cost=counts.untriggered_cost,
             )
             for operator, counts in sorted(self.by_operator.items(), key=lambda item: item[0].value)
         )
@@ -154,6 +183,9 @@ class TemplateActivity:
                 DaySegments(day=day, segments=segments)
                 for day, segments in sorted(self.daily.items())
             ),
+            untriggered_messages=self.untriggered_messages,
+            untriggered_segments=self.untriggered_segments,
+            untriggered_cost=self.untriggered_cost,
         )
 
 

@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from mts_templates.application.dto import (
+    ActionCenterView,
+    ActionItemView,
     AnalysisView,
     BatchStatistics,
     CandidateView,
@@ -255,6 +257,48 @@ def analysis_to_dict(view: AnalysisView) -> dict[str, Any]:
         "daily_templated_segments": [
             day_segments_to_dict(item) for item in view.daily_templated_segments
         ],
+    }
+
+
+def action_item_to_dict(item: ActionItemView) -> dict[str, Any]:
+    return {
+        "key": item.key,
+        "kind": item.kind,
+        "severity": item.severity,
+        "title": item.title,
+        "subject": item.subject,
+        "template_id": item.template_id,
+        "template_name": item.template_name,
+        "operator": item.operator,
+        "detail": item.detail,
+        "recommendation": item.recommendation,
+        "monthly_loss": money(item.monthly_loss),
+        "messages": item.messages,
+        "segments": item.segments,
+        "drill_down": item.drill_down,
+    }
+
+
+def action_center_to_dict(view: ActionCenterView) -> dict[str, Any]:
+    return {
+        "batch_id": view.batch_id,
+        "period_from": moment(view.period_from),
+        "period_to": moment(view.period_to),
+        "is_partial_period": view.is_partial_period,
+        "monthly_factor": view.monthly_factor,
+        "total_monthly_loss": money(view.total_monthly_loss),
+        "loss_templates": view.loss_templates,
+        "off_operator_loss": money(view.off_operator_loss),
+        "untriggered_loss": money(view.untriggered_loss),
+        "off_operator_messages": view.off_operator_messages,
+        "untriggered_messages": view.untriggered_messages,
+        "unmatched_templated_messages": view.unmatched_templated_messages,
+        "unmatched_templated_segments": view.unmatched_templated_segments,
+        "unmatched_templated_cost": money(view.unmatched_templated_cost),
+        "observed_ordinary_rate": money(view.observed_ordinary_rate),
+        "observed_templated_rate": money(view.observed_templated_rate),
+        "items": [action_item_to_dict(item) for item in view.items],
+        "warnings": list(view.warnings),
     }
 
 

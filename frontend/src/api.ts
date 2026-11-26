@@ -1,4 +1,5 @@
 import type {
+  ActionCenter,
   Analysis,
   AppSettings,
   DashboardSummary,
@@ -119,9 +120,27 @@ export const api = {
     )
   },
 
-  matchedTemplateMessages: (batchId: string, templateId: string) =>
+  matchedTemplateMessages: (
+    batchId: string,
+    templateId: string,
+    options: { operator?: string | null; untriggered?: boolean } = {},
+  ) => {
+    const params = new URLSearchParams({ batch_id: batchId })
+    if (options.operator) params.set('operator', options.operator)
+    if (options.untriggered) params.set('untriggered', 'true')
+    return request<{ messages: MatchedMessage[] }>(
+      `/matched-messages/template/${encodeURIComponent(templateId)}?${params.toString()}`,
+    )
+  },
+
+  unmatchedTemplatedMessages: (batchId: string) =>
     request<{ messages: MatchedMessage[] }>(
-      `/matched-messages/template/${encodeURIComponent(templateId)}?batch_id=${encodeURIComponent(batchId)}`,
+      `/matched-messages/unmatched-templated?batch_id=${encodeURIComponent(batchId)}`,
+    ),
+
+  actionCenter: (batchId: string, force = false) =>
+    request<ActionCenter>(
+      `/action-center?batch_id=${encodeURIComponent(batchId)}${force ? '&force=true' : ''}`,
     ),
 
   matchedCandidateMessages: (batchId: string, candidateId: string) =>

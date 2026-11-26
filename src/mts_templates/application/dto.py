@@ -380,6 +380,50 @@ class AnalysisView:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionItemView:
+    """Пункт центра действий: проблема, сумма, объёмы и переход к сообщениям."""
+
+    key: str
+    kind: str
+    severity: int
+    title: str
+    subject: str
+    template_id: str | None
+    template_name: str
+    operator: str | None
+    detail: str
+    recommendation: str
+    monthly_loss: Money
+    messages: int
+    segments: int
+    drill_down: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ActionCenterView:
+    """Рабочий список проблем по выбранной загрузке."""
+
+    batch_id: str
+    period_from: datetime
+    period_to: datetime
+    is_partial_period: bool
+    monthly_factor: float
+    total_monthly_loss: Money
+    loss_templates: int
+    off_operator_loss: Money
+    untriggered_loss: Money
+    off_operator_messages: int
+    untriggered_messages: int
+    unmatched_templated_messages: int
+    unmatched_templated_segments: int
+    unmatched_templated_cost: Money
+    observed_ordinary_rate: Money | None
+    observed_templated_rate: Money | None
+    items: tuple[ActionItemView, ...]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class BatchStatistics:
     """Агрегаты по загрузке, посчитанные в SQL."""
 

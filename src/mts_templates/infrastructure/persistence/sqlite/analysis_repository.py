@@ -10,7 +10,7 @@ from typing import Any
 
 from mts_templates.domain.analytics.activity import DaySegments, OperatorTrigger, TemplateMetrics
 from mts_templates.domain.analytics.analysis import AnalysisRun, CandidateGroup
-from mts_templates.domain.value_objects import Operator, Period
+from mts_templates.domain.value_objects import Money, Operator, Period
 from mts_templates.infrastructure.persistence.sqlite.database import Database
 from mts_templates.infrastructure.persistence.sqlite.repositories import (
     kopecks_to_money,
@@ -80,9 +80,21 @@ class SqliteAnalysisRepository:
                                         "matched_messages": item.matched_messages,
                                         "triggered_messages": item.triggered_messages,
                                         "matched_segments": item.matched_segments,
+                                        "untriggered_messages": item.untriggered_messages,
+                                        "untriggered_segments": item.untriggered_segments,
+                                        "untriggered_cost": str(item.untriggered_cost),
                                     }
                                     for item in run.operator_triggers
                                 ],
+                                "observed_ordinary_rate": _optional_money(
+                                    run.observed_ordinary_rate
+                                ),
+                                "observed_templated_rate": _optional_money(
+                                    run.observed_templated_rate
+                                ),
+                                "unmatched_templated_messages": run.unmatched_templated_messages,
+                                "unmatched_templated_segments": run.unmatched_templated_segments,
+                                "unmatched_templated_cost": str(run.unmatched_templated_cost),
                                 "daily_segments": _daily_payload(run.daily_segments),
                                 "daily_templated_segments": _daily_payload(
                                     run.daily_templated_segments
@@ -108,8 +120,9 @@ class SqliteAnalysisRepository:
                         (run_id, template_id, active, matched_messages, matched_segments,
                          actual_cost_kopecks, baseline_cost_kopecks, template_fee_kopecks,
                          net_benefit_kopecks, trigger_rate, delivered_messages, unique_recipients,
-                         triggered_messages, off_operator_messages)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         triggered_messages, off_operator_messages, untriggered_messages,
+                         untriggered_segments, untriggered_cost_kopecks)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         (
@@ -127,6 +140,9 @@ class SqliteAnalysisRepository:
                             metrics.unique_recipients,
                             metrics.triggered_messages,
                             metrics.off_operator_messages,
+                            metrics.untriggered_messages,
+                            metrics.untriggered_segments,
+                            money_to_kopecks(metrics.untriggered_cost),
                         )
                         for metrics in run.metrics
                     ),
@@ -210,6 +226,12 @@ class SqliteAnalysisRepository:
             ),
             daily_segments=_day_segments(payload.get("daily_segments", [])),
             daily_templated_segments=_day_segments(payload.get("daily_templated_segments", [])),
+            observed_ordinary_rate=_payload_money(payload.get("observed_ordinary_rate")),
+            observed_templated_rate=_payload_money(payload.get("observed_templated_rate")),
+            unmatched_templated_messages=int(payload.get("unmatched_templated_messages", 0)),
+            unmatched_templated_segments=int(payload.get("unmatched_templated_segments", 0)),
+            unmatched_templated_cost=_payload_money(payload.get("unmatched_templated_cost"))
+            or Money.zero(),
         )
 
     def _load_metrics(
@@ -222,7 +244,8 @@ class SqliteAnalysisRepository:
             SELECT template_id, active, matched_messages, matched_segments,
                    actual_cost_kopecks, baseline_cost_kopecks, template_fee_kopecks,
                    net_benefit_kopecks, trigger_rate, delivered_messages, unique_recipients,
-                   triggered_messages, off_operator_messages
+                   triggered_messages, off_operator_messages, untriggered_messages,
+                   untriggered_segments, untriggered_cost_kopecks
             FROM template_metrics
             WHERE run_id = ?
             ORDER BY net_benefit_kopecks DESC, template_id
@@ -245,6 +268,9 @@ class SqliteAnalysisRepository:
                 trigger_rate=Decimal(str(row["trigger_rate"])),
                 active=bool(row["active"]),
                 daily_segments=template_daily.get(str(row["template_id"]), ()),
+                untriggered_messages=int(row["untriggered_messages"]),
+                untriggered_segments=int(row["untriggered_segments"]),
+                untriggered_cost=kopecks_to_money(int(row["untriggered_cost_kopecks"])),
             )
             for row in rows
         ]
@@ -330,7 +356,22 @@ def _operator_trigger(item: dict[str, Any]) -> OperatorTrigger:
         matched_messages=int(item["matched_messages"]),
         triggered_messages=int(item["triggered_messages"]),
         matched_segments=int(item.get("matched_segments", 0)),
+        untriggered_messages=int(item.get("untriggered_messages", 0)),
+        untriggered_segments=int(item.get("untriggered_segments", 0)),
+        untriggered_cost=_payload_money(item.get("untriggered_cost")) or Money.zero(),
     )
+
+
+def _optional_money(value: Money | None) -> str | None:
+    """Денежная ставка для payload: строка или None."""
+    return None if value is None else str(value)
+
+
+def _payload_money(value: Any) -> Money | None:
+    """Денежное значение из payload: строка или None."""
+    if value in (None, ""):
+        return None
+    return Money.from_rub(str(value))
 
 
 def _period_from_row(row: sqlite3.Row, fallback: Period) -> Period:

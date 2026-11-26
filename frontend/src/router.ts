@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from './views/DashboardView.vue'
+import ActionCenterView from './views/ActionCenterView.vue'
 import TemplatesView from './views/TemplatesView.vue'
 import CandidatesView from './views/CandidatesView.vue'
 import ImportView from './views/ImportView.vue'
@@ -10,6 +11,12 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'dashboard', component: DashboardView, meta: { title: 'Дашборд' } },
+    {
+      path: '/actions',
+      name: 'actions',
+      component: ActionCenterView,
+      meta: { title: 'Центр действий' },
+    },
     { path: '/templates', name: 'templates', component: TemplatesView, meta: { title: 'Шаблоны' } },
     {
       path: '/candidates',

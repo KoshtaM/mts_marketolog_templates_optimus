@@ -23,6 +23,8 @@ from mts_templates.application.services.analysis_service import (
     compute_config_hash,
 )
 from mts_templates.application.services.analysis_view import to_analysis_view
+from mts_templates.domain.analytics.analysis import AnalysisRun
+from mts_templates.domain.entities import SmsTemplate
 from mts_templates.domain.errors import TemplateAnalysisError
 from mts_templates.domain.tariffs.models import TariffCatalog
 
@@ -56,11 +58,21 @@ class AnalyzeTemplates:
         *,
         should_cancel: Callable[[], bool] | None = None,
     ) -> AnalysisView:
+        run, templates = self.execute_run(request, should_cancel=should_cancel)
+        return to_analysis_view(run, templates)
+
+    def execute_run(
+        self,
+        request: AnalyzeRequest,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> tuple[AnalysisRun, tuple[SmsTemplate, ...]]:
+        """Доменный прогон анализа: нужен сценариям, которым мало `AnalysisView`."""
         batch = self._imports.get(request.batch_id)
         if batch is None:
             raise TemplateAnalysisError(f"Загрузка статистики не найдена: {request.batch_id}")
 
-        templates = self._templates.list_all()
+        templates = tuple(self._templates.list_all())
         config = self._config_provider()
         config_hash = compute_config_hash(
             config, templates, include_candidates=request.include_candidates
@@ -70,7 +82,7 @@ class AnalyzeTemplates:
             cached = self._analysis.find(batch.id, config_hash)
             if cached is not None:
                 logger.info("Анализ взят из кэша: batch=%s hash=%s", batch.id, config_hash)
-                return to_analysis_view(cached, templates)
+                return cached, templates
 
         run = compute_analysis(
             batch=batch,
@@ -91,4 +103,4 @@ class AnalyzeTemplates:
             len(run.metrics),
             len(run.candidates),
         )
-        return to_analysis_view(run, templates)
+        return run, templates

@@ -16,6 +16,7 @@ from mts_templates.domain.analytics.normalization import mask_phone, sender_key
 from mts_templates.domain.analytics.template_syntax import compile_pattern
 from mts_templates.domain.entities import SmsMessage
 from mts_templates.domain.errors import OperationCancelled, TemplateSyntaxError
+from mts_templates.domain.value_objects import MessageClass
 
 UNKNOWN_STATUS = "Статус не указан"
 
@@ -38,9 +39,15 @@ class ListMatchedMessages:
         batch_id: str,
         template_id: str,
         *,
+        operator: str | None = None,
+        untriggered_only: bool = False,
         should_cancel: Callable[[], bool] | None = None,
     ) -> tuple[MatchedMessageView, ...]:
-        """Все сообщения, подпавшие под шаблон: и сработавшие, и оплаченные как обычные."""
+        """Все сообщения, подпавшие под шаблон: и сработавшие, и оплаченные как обычные.
+
+        `operator` и `untriggered_only` сужают выборку для центра действий:
+        показываем именно те сообщения, из-за которых возникла проблема.
+        """
         config = self._config_provider()
         policy = config.normalization_policy()
         compiled = compile_templates(
@@ -59,8 +66,47 @@ class ListMatchedMessages:
                 policy,
                 sender_case_sensitive=config.sender_case_sensitive,
             )
-            if template is not None and template.template_id == template_id:
-                result.append(_to_view(message))
+            if template is None or template.template_id != template_id:
+                continue
+            if operator is not None and message.operator.value != operator:
+                continue
+            if untriggered_only and message.message_class is not MessageClass.ORDINARY:
+                continue
+            result.append(_to_view(message))
+        return tuple(result)
+
+    def unmatched_templated(
+        self,
+        batch_id: str,
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> tuple[MatchedMessageView, ...]:
+        """Сообщения, оплаченные как шаблонированные, но не подпавшие ни под один шаблон."""
+        config = self._config_provider()
+        policy = config.normalization_policy()
+        compiled = compile_templates(
+            (item for item in self._templates.list_all() if item.active),
+            policy,
+            sender_case_sensitive=config.sender_case_sensitive,
+        )
+        result: list[MatchedMessageView] = []
+        for message in self._messages.iter_messages(batch_id):
+            _raise_if_cancelled(should_cancel)
+            if message.segments <= 0:
+                continue
+            if message.message_class is not MessageClass.TEMPLATED:
+                continue
+            if (
+                resolve_template(
+                    message,
+                    compiled,
+                    policy,
+                    sender_case_sensitive=config.sender_case_sensitive,
+                )
+                is not None
+            ):
+                continue
+            result.append(_to_view(message))
         return tuple(result)
 
     def for_candidate(

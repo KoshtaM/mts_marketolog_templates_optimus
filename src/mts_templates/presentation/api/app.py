@@ -36,6 +36,7 @@ from mts_templates.domain.analytics.normalization import PUNCTUATION_POLICIES
 from mts_templates.domain.errors import DomainError
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.api.serializers import (
+    action_center_to_dict,
     analysis_to_dict,
     batch_to_dict,
     dashboard_to_dict,
@@ -206,13 +207,36 @@ def _register_routes(app: FastAPI) -> None:
         )
         return analysis_to_dict(view)
 
+    @app.get(f"{API_PREFIX}/action-center")
+    def action_center(
+        batch_id: str,
+        force: bool = False,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, Any]:
+        return action_center_to_dict(container.action_center.execute(batch_id, force=force))
+
     @app.get(f"{API_PREFIX}/matched-messages/template/{{template_id}}")
     def matched_template_messages(
         template_id: str,
         batch_id: str,
+        operator: str | None = None,
+        untriggered: bool = False,
         container: Container = Depends(_get_container),
     ) -> dict[str, Any]:
-        messages = container.matched_messages.for_template(batch_id, template_id)
+        messages = container.matched_messages.for_template(
+            batch_id,
+            template_id,
+            operator=operator,
+            untriggered_only=untriggered,
+        )
+        return {"messages": [_message_to_dict(item) for item in messages]}
+
+    @app.get(f"{API_PREFIX}/matched-messages/unmatched-templated")
+    def unmatched_templated_messages(
+        batch_id: str,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, Any]:
+        messages = container.matched_messages.unmatched_templated(batch_id)
         return {"messages": [_message_to_dict(item) for item in messages]}
 
     @app.get(f"{API_PREFIX}/matched-messages/candidate/{{candidate_id}}")
