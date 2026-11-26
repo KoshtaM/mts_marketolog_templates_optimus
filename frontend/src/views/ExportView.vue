@@ -136,7 +136,7 @@ async function download(): Promise<void> {
               {{ money(summary?.total_monthly_net_benefit ?? '0') }}
             </strong>
           </div>
-          <div class="row" style="margin-top: 16px">
+          <div class="row card-footer" style="margin-top: 16px">
             <button class="btn" type="button" @click="loadDashboard(state.batchId)">Обновить данные</button>
             <RouterLink class="btn" to="/templates">К шаблонам</RouterLink>
           </div>

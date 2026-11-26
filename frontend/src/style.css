@@ -271,9 +271,11 @@ button {
   background: var(--surface);
   border: var(--border-width) solid var(--border);
   border-radius: var(--radius-lg);
-  padding: calc(var(--space) * 2);
+  padding: calc(var(--space) * 2.25);
   box-shadow: var(--shadow-soft);
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 html[data-hard-shadow='true'] .card,
@@ -287,18 +289,40 @@ html[data-hard-shadow='true'] .modal {
   align-items: center;
   justify-content: space-between;
   gap: calc(var(--space) * 2);
-  margin-bottom: calc(var(--space) * 1.5);
+  margin-bottom: calc(var(--space) * 1.75);
+  flex: 0 0 auto;
 }
 
 .card-title {
   font-family: var(--font-heading);
   font-weight: 700;
   font-size: 15px;
+  letter-spacing: -0.01em;
 }
 
 .card-caption {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Нижний поясняющий блок карточки всегда прижат к её нижнему краю. */
+.card-footer {
+  margin-top: auto;
+  padding-top: calc(var(--space) * 1.5);
+}
+
+.card > .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.chart-fit {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 /* Кнопки и поля */
@@ -420,6 +444,34 @@ input[type='checkbox'] {
   border: var(--border-width) solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 35%, transparent) transparent;
+}
+
+.table-wrap.fill {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.table-wrap.fill table.data {
+  align-self: flex-start;
+  width: 100%;
+}
+
+.table-wrap.sticky-first table.data th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: color-mix(in srgb, var(--surface-alt) 55%, var(--surface));
+}
+
+.table-wrap.sticky-first table.data td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: inherit;
 }
 
 table.data {
@@ -427,46 +479,66 @@ table.data {
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
+  line-height: 1.4;
 }
 
 table.data th {
   position: sticky;
   top: 0;
-  z-index: 1;
-  background: var(--surface);
+  z-index: 3;
+  background: color-mix(in srgb, var(--surface-alt) 55%, var(--surface));
   color: var(--header-text);
   text-align: left;
   font-weight: 700;
   font-size: 11px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
   padding: 10px 14px;
   border-bottom: var(--border-width) solid var(--border);
   white-space: nowrap;
 }
 
+table.data th[data-sortable='true'] {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+table.data th[data-sortable='true']:hover {
+  color: var(--text);
+}
+
+table.data tbody tr {
+  background: var(--surface);
+}
+
 table.data td {
   padding: 10px 14px;
-  border-bottom: var(--border-width) solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-bottom: var(--border-width) solid color-mix(in srgb, var(--border) 55%, transparent);
   vertical-align: middle;
-}
-
-table.data tbody tr:hover {
-  background: color-mix(in srgb, var(--selection) 45%, transparent);
-}
-
-table.data tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--surface-alt) 60%, var(--surface));
 }
 
 table.data tbody tr:last-child td {
   border-bottom: none;
 }
 
+table.data tbody tr:hover {
+  background: color-mix(in srgb, var(--selection) 42%, var(--surface));
+}
+
+table.data tbody tr:hover td:first-child {
+  background: inherit;
+}
+
 .th-sort {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.th-sort-indicator {
+  font-size: 9px;
+  opacity: 0.85;
 }
 
 table.data th.num {
@@ -499,43 +571,62 @@ table.data th.num {
   text-align: left;
   font: inherit;
   font-weight: 600;
+  line-height: 1.4;
   cursor: pointer;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
   text-underline-offset: 3px;
+  transition: color 0.15s ease;
 }
 
 .link-button:hover {
   color: var(--accent);
 }
 
-.row-benefit-1 {
+/* Длинный текст шаблона занимает не больше двух строк, полный текст — в подсказке. */
+.cell-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.link-button.cell-clamp {
+  max-width: 100%;
+}
+
+table.data tbody tr.row-benefit-1 {
   background: color-mix(in srgb, var(--positive) 9%, var(--surface));
 }
 
-.row-benefit-2 {
+table.data tbody tr.row-benefit-2 {
   background: color-mix(in srgb, var(--positive) 18%, var(--surface));
 }
 
-.row-benefit-3 {
+table.data tbody tr.row-benefit-3 {
   background: color-mix(in srgb, var(--positive) 27%, var(--surface));
 }
 
-.row-benefit-4 {
+table.data tbody tr.row-benefit-4 {
   background: color-mix(in srgb, var(--positive) 38%, var(--surface));
 }
 
-.row-benefit-5 {
+table.data tbody tr.row-benefit-5 {
   background: color-mix(in srgb, var(--positive) 50%, var(--surface));
 }
 
-.row-loss {
+table.data tbody tr.row-loss {
   background: color-mix(in srgb, var(--negative) 13%, var(--surface));
 }
 
-tr.selected-row {
-  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  outline-offset: -2px;
+table.data tbody tr.selected-row {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+table.data tbody tr.selected-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* Индикаторы */
@@ -622,18 +713,79 @@ tr.selected-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Единая 12-колоночная сетка дашбордов: карточки в одном ряду
+   всегда одной высоты, нижние края выровнены. */
+.dashboard-grid,
+.candidate-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
+}
+
+.dashboard-grid > .span-4,
+.candidate-grid > .span-4 {
+  grid-column: span 4;
+}
+
+.dashboard-grid > .span-5,
+.candidate-grid > .span-5 {
+  grid-column: span 5;
+}
+
+.dashboard-grid > .span-6,
+.candidate-grid > .span-6 {
+  grid-column: span 6;
+}
+
+.dashboard-grid > .span-7,
+.candidate-grid > .span-7 {
+  grid-column: span 7;
+}
+
+.dashboard-grid > .span-8,
+.candidate-grid > .span-8 {
+  grid-column: span 8;
+}
+
+.dashboard-grid > .span-12,
+.candidate-grid > .span-12 {
+  grid-column: 1 / -1;
+}
+
 .columns-3-2 {
   display: grid;
   grid-template-columns: 3fr 2fr;
-  gap: calc(var(--space) * 2);
-  align-items: start;
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
 }
 
 .columns-1-1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: calc(var(--space) * 2);
-  align-items: start;
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
+}
+
+.split-7-5 {
+  display: grid;
+  grid-template-columns: 7fr 5fr;
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
+}
+
+.lower-grid {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
+}
+
+.audience-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space) * 2.25);
+  align-items: stretch;
 }
 
 .stack {
@@ -641,6 +793,11 @@ tr.selected-row {
   flex-direction: column;
   gap: calc(var(--space) * 2);
   min-width: 0;
+}
+
+.stack > .grow {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .row {
@@ -809,6 +966,11 @@ tr.selected-row {
   .columns-3-2 {
     grid-template-columns: 2fr 1fr;
   }
+
+  .split-7-5,
+  .lower-grid {
+    grid-template-columns: 3fr 2fr;
+  }
 }
 
 @media (max-width: 1280px) {
@@ -838,8 +1000,19 @@ tr.selected-row {
 @media (max-width: 1180px) {
   .columns-3-2,
   .columns-1-1,
-  .audience-grid {
+  .split-7-5,
+  .lower-grid,
+  .audience-grid,
+  .dashboard-grid,
+  .candidate-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-grid > *,
+  .candidate-grid > *,
+  .dashboard-grid > .card,
+  .candidate-grid > .card {
+    grid-column: 1 / -1;
   }
 }
 
@@ -892,6 +1065,11 @@ tr.selected-row {
     width: 100%;
     max-width: none;
   }
+
+  .card-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 640px) {
@@ -903,4 +1081,9 @@ tr.selected-row {
   .page-title {
     font-size: 22px;
   }
+}
+
+/* В карточке-заглушке кнопка не растягивается на всю ширину. */
+.empty > .btn {
+  align-self: center;
 }

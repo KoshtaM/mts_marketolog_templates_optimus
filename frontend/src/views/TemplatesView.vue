@@ -211,8 +211,8 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <section class="card">
-        <div class="table-wrap" style="max-height: 430px">
+      <section class="card table-card">
+        <div class="table-wrap sticky-first" style="max-height: 440px">
           <table class="data">
             <thead>
               <tr>
@@ -220,11 +220,12 @@ onMounted(() => {
                   v-for="header in headers"
                   :key="header.key"
                   :style="header.narrow ? 'width: 1%; white-space: nowrap' : ''"
+                  data-sortable="true"
                   @click="toggleSort(header.key)"
                 >
                   <span class="th-sort">
                     {{ header.label }}
-                    <span v-if="sortKey === header.key">{{ sortDir === 1 ? '▲' : '▼' }}</span>
+                    <span v-if="sortKey === header.key" class="th-sort-indicator">{{ sortDir === 1 ? '▲' : '▼' }}</span>
                   </span>
                 </th>
               </tr>
@@ -236,8 +237,8 @@ onMounted(() => {
                 :class="[benefitClass(metric.monthly_net_benefit), { 'selected-row': metric.template_id === selectedId }]"
                 @click="selectedId = metric.template_id"
               >
-                <td style="min-width: 280px">
-                  <button class="link-button" type="button" :title="metric.text" @click.stop="openMessages(metric)">
+                <td style="min-width: 340px; max-width: 400px">
+                  <button class="link-button cell-clamp" type="button" :title="metric.text" @click.stop="openMessages(metric)">
                     {{ metric.text }}
                   </button>
                 </td>
@@ -272,8 +273,8 @@ onMounted(() => {
         </div>
       </section>
 
-      <div class="lower-grid">
-        <section class="card">
+      <div class="split-7-5">
+        <section class="card chart-card">
           <div class="card-header">
             <div>
               <div class="card-title">Сегменты по дням</div>
@@ -286,93 +287,92 @@ onMounted(() => {
               Только шаблонированные
             </label>
           </div>
-          <SegmentChart
-            v-if="selected"
-            :base="chartBase"
-            :matched="selected.daily_segments"
-            :caption="chartCaption"
-            :matched-label="'Соответствуют шаблону'"
-            :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
-            :height="200"
-          />
+          <div v-if="selected" class="chart-fit">
+            <SegmentChart
+              :base="chartBase"
+              :matched="selected.daily_segments"
+              :caption="chartCaption"
+              :matched-label="'Соответствуют шаблону'"
+              :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
+              :height="240"
+            />
+          </div>
           <div v-else class="empty">Выберите шаблон, чтобы увидеть его сообщения по дням</div>
         </section>
 
-        <div class="stack">
-          <section class="card">
-            <div class="card-header">
-              <div class="card-title">Выгода шаблонов</div>
-              <div class="card-caption">в месяц, все шаблоны</div>
-            </div>
-            <div class="benefit-lines">
-              <div class="benefit-line">
-                <strong class="positive">{{ money(totals.positive, 0) }}</strong>
-                <span>Выгода выгодных шаблонов, ₽/мес</span>
-              </div>
-              <div class="benefit-line">
-                <strong class="negative">{{ money(totals.negative, 0) }}</strong>
-                <span>Убыток убыточных шаблонов, ₽/мес</span>
-              </div>
-              <div class="benefit-line">
-                <strong :class="totals.total >= 0 ? 'positive' : 'negative'">{{ money(totals.total, 0) }}</strong>
-                <span>Выгода всех шаблонов, ₽/мес</span>
+        <section class="card operator-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Срабатывание по операторам</div>
+              <div class="card-caption">
+                {{ selected ? selected.name || selected.template_id : 'шаблон не выбран' }}
               </div>
             </div>
-            <p class="card-caption" style="margin-top: 10px">{{ summaryText }}</p>
-          </section>
-
-          <section class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Срабатывание по операторам получателя</div>
-                <div class="card-caption">
-                  {{ selected ? selected.name || selected.template_id : 'шаблон не выбран' }}
-                </div>
-              </div>
-            </div>
-            <div v-if="!selectedTriggers.length" class="empty" style="padding: 20px">
-              Нет разбивки: выберите шаблон или за период не было подпавших сообщений
-            </div>
-            <div v-else class="table-wrap" style="max-height: 210px">
-              <table class="data">
-                <thead>
-                  <tr>
-                    <th>Оператор</th>
-                    <th>В списке</th>
-                    <th class="num">Подпало</th>
-                    <th class="num">Сегментов</th>
-                    <th class="num">Доля</th>
-                    <th class="num">Срабатываний</th>
-                    <th class="num">Срабатывание</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="trigger in selectedTriggers"
-                    :key="`${trigger.template_id}-${trigger.operator}`"
-                    :class="trigger.listed ? 'row-benefit-2' : 'row-loss'"
-                  >
-                    <td>{{ trigger.operator }}</td>
-                    <td>{{ trigger.listed ? '✓' : '✗' }}</td>
-                    <td class="num">{{ integer(trigger.matched_messages) }}</td>
-                    <td class="num">{{ integer(trigger.matched_segments) }}</td>
-                    <td class="num">{{ share(trigger.share) }}</td>
-                    <td class="num">{{ integer(trigger.triggered_messages) }}</td>
-                    <td class="num">{{ share(trigger.trigger_rate) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <details v-if="analysis.warnings.length" class="card warnings">
-            <summary>▸ Предупреждения анализа · {{ analysis.warnings.length }}</summary>
-            <ul>
-              <li v-for="warning in analysis.warnings" :key="warning">{{ warning }}</li>
-            </ul>
-          </details>
-        </div>
+          </div>
+          <div v-if="!selectedTriggers.length" class="empty">
+            Нет разбивки: выберите шаблон или за период не было подпавших сообщений
+          </div>
+          <div v-else class="table-wrap fill">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Оператор</th>
+                  <th>В списке</th>
+                  <th class="num">Подпало</th>
+                  <th class="num">Сегментов</th>
+                  <th class="num">Доля</th>
+                  <th class="num">Срабатываний</th>
+                  <th class="num">Срабатывание</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="trigger in selectedTriggers"
+                  :key="`${trigger.template_id}-${trigger.operator}`"
+                  :class="trigger.listed ? 'row-benefit-2' : 'row-loss'"
+                >
+                  <td>{{ trigger.operator }}</td>
+                  <td>
+                    <span :class="trigger.listed ? 'positive' : 'negative'">{{ trigger.listed ? '✓' : '✗' }}</span>
+                  </td>
+                  <td class="num">{{ integer(trigger.matched_messages) }}</td>
+                  <td class="num">{{ integer(trigger.matched_segments) }}</td>
+                  <td class="num">{{ share(trigger.share) }}</td>
+                  <td class="num">{{ integer(trigger.triggered_messages) }}</td>
+                  <td class="num">{{ share(trigger.trigger_rate) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
+
+      <section class="card benefit-strip">
+        <div class="benefit-stats">
+          <div class="benefit-stat">
+            <span class="benefit-stat-label">Выгода выгодных шаблонов</span>
+            <strong class="benefit-stat-value positive">{{ money(totals.positive, 0) }} <span>₽/мес</span></strong>
+          </div>
+          <div class="benefit-stat">
+            <span class="benefit-stat-label">Убыток убыточных шаблонов</span>
+            <strong class="benefit-stat-value negative">{{ money(totals.negative, 0) }} <span>₽/мес</span></strong>
+          </div>
+          <div class="benefit-stat">
+            <span class="benefit-stat-label">Выгода всех шаблонов</span>
+            <strong class="benefit-stat-value" :class="totals.total >= 0 ? 'positive' : 'negative'">
+              {{ money(totals.total, 0) }} <span>₽/мес</span>
+            </strong>
+          </div>
+        </div>
+        <p class="card-caption benefit-note">{{ summaryText }}</p>
+      </section>
+
+      <details v-if="analysis.warnings.length" class="card warnings">
+        <summary>▸ Предупреждения анализа · {{ analysis.warnings.length }}</summary>
+        <ul>
+          <li v-for="warning in analysis.warnings" :key="warning">{{ warning }}</li>
+        </ul>
+      </details>
     </template>
 
     <MatchedMessagesDialog
@@ -388,44 +388,88 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.th-sort {
-  display: inline-flex;
+.table-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.table-card > .table-wrap {
+  border: none;
+  border-radius: calc(var(--radius-lg) - 1px);
+}
+
+.operator-card > .empty,
+.chart-card > .empty {
+  flex: 1 1 auto;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  user-select: none;
+  justify-content: center;
 }
 
-.lower-grid {
-  display: grid;
-  grid-template-columns: 3fr 2fr;
-  gap: calc(var(--space) * 2);
-  align-items: start;
-}
-
-.benefit-lines {
+.benefit-strip {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(var(--space) * 1.5);
 }
 
-.benefit-line {
+.benefit-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space) * 2);
+}
+
+.benefit-stat {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: calc(var(--space) * 2);
+  border-left: 3px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.benefit-stat:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.benefit-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.benefit-line strong {
-  font-size: 19px;
-  min-width: 120px;
+.benefit-stat-value {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
+.benefit-stat-value span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.benefit-note {
+  margin: 0;
+  padding-top: calc(var(--space) * 1.25);
+  border-top: var(--border-width) solid var(--border);
+}
+
 @media (max-width: 1180px) {
-  .lower-grid {
+  .benefit-stats {
     grid-template-columns: 1fr;
+    gap: calc(var(--space) * 1.25);
+  }
+
+  .benefit-stat {
+    padding-left: 0;
+    border-left: none;
   }
 }
 </style>

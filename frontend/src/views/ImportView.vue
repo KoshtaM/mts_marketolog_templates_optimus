@@ -305,7 +305,7 @@ function resetPreview(): void {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: calc(var(--space) * 2);
-  align-items: start;
+  align-items: stretch;
 }
 
 .import-card {

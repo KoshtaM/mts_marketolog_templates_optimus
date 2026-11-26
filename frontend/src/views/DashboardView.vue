@@ -106,24 +106,6 @@ const costShares = computed(() => {
   return { templated: templatedShare, ordinary: Math.max(0, 1 - templatedShare) }
 })
 
-const segmentDonut = computed(() => {
-  const stats = statistics.value
-  if (!stats) return []
-  return [
-    { name: 'Шаблонированные', value: stats.templated_segments, color: TEMPLATED_COLOR },
-    { name: 'Обычные', value: stats.ordinary_segments, color: ORDINARY_COLOR },
-  ]
-})
-
-const costDonut = computed(() => {
-  const stats = statistics.value
-  if (!stats) return []
-  return [
-    { name: 'Шаблонированные', value: moneyValue(stats.templated_cost), color: TEMPLATED_COLOR },
-    { name: 'Обычные', value: moneyValue(stats.ordinary_cost), color: ORDINARY_COLOR },
-  ]
-})
-
 const cheaperHint = computed(() => {
   const stats = statistics.value
   if (!stats) return ''
@@ -235,110 +217,115 @@ onMounted(() => {
       </section>
 
       <template v-if="mode === 'overview'">
-        <div class="columns-3-2">
-          <div class="stack">
-            <section class="card">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">Динамика по дням</div>
-                  <div class="card-caption">отправленные SMS-сегменты по операторам</div>
-                </div>
-                <div class="card-caption">всего {{ integer(statistics?.segments ?? 0) }} сегментов</div>
+        <div class="dashboard-grid">
+          <section class="card span-7 chart-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Динамика по дням</div>
+                <div class="card-caption">отправленные SMS-сегменты по операторам</div>
               </div>
+              <div class="card-caption">всего {{ integer(statistics?.segments ?? 0) }} сегментов</div>
+            </div>
+            <div class="chart-fit">
               <StackedBarChart :items="dailyItems" :height="230" />
-            </section>
+            </div>
+          </section>
 
-            <section class="card">
-              <div class="card-header">
-                <div class="card-title">Классы сообщений</div>
-                <div class="card-caption">доли и средняя стоимость — по SMS-сегментам</div>
-              </div>
-              <div class="table-wrap">
-                <table class="data">
-                  <thead>
-                    <tr>
-                      <th>Класс</th>
-                      <th class="num">Сообщений</th>
-                      <th class="num">Сегментов</th>
-                      <th class="num">Счёт</th>
-                      <th class="num">Средняя стоимость сегмента</th>
-                      <th>Доля</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in classesRows" :key="row.name">
-                      <td>
-                        <span class="row" style="gap: 8px">
-                          <i :style="{ background: row.tone, width: '9px', height: '9px', borderRadius: '3px', display: 'inline-block' }"></i>
-                          {{ row.name }}
-                        </span>
-                      </td>
-                      <td class="num">{{ integer(row.messages) }}</td>
-                      <td class="num">{{ integer(row.segments) }}</td>
-                      <td class="num">{{ money(row.cost) }}</td>
-                      <td class="num">{{ money(row.average) }}</td>
-                      <td style="min-width: 120px"><ShareMeter :value="row.shareValue" :color="row.tone" /></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-
-          <div class="stack">
-            <section class="card">
-              <div class="card-header">
+          <section class="card span-5 structure-card">
+            <div class="card-header">
+              <div>
                 <div class="card-title">Структура</div>
-                <div class="card-caption">доли целого</div>
+                <div class="card-caption">доли целого по сегментам и расходам</div>
               </div>
+            </div>
+            <div class="structure-fit">
               <StructureBars
                 :ordinary-segment-share="statistics?.ordinary_segment_share ?? 0"
                 :templated-segment-share="statistics?.templated_segment_share ?? 0"
                 :ordinary-cost-share="costShares.ordinary"
                 :templated-cost-share="costShares.templated"
               />
-              <div v-if="cheaperHint" class="insight">{{ cheaperHint }}</div>
-              <div class="donuts">
-                <DonutChart :slices="segmentDonut" :height="150" :center-label="integer(statistics?.segments ?? 0)" />
-                <DonutChart :slices="costDonut" :height="150" :center-label="money(statistics?.cost ?? '0', 0)" />
-              </div>
-            </section>
+            </div>
+            <div v-if="cheaperHint" class="insight">{{ cheaperHint }}</div>
+            <p class="card-caption card-footer">
+              Доли считаются по SMS-сегментам и фактическим списаниям периода.
+            </p>
+          </section>
 
-            <section class="card">
-              <div class="card-header">
+          <section class="card span-7">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Классы сообщений</div>
+                <div class="card-caption">доли и средняя стоимость — по SMS-сегментам</div>
+              </div>
+            </div>
+            <div class="table-wrap fill">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th>Класс</th>
+                    <th class="num">Сообщений</th>
+                    <th class="num">Сегментов</th>
+                    <th class="num">Счёт</th>
+                    <th class="num">Средняя стоимость сегмента</th>
+                    <th>Доля</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in classesRows" :key="row.name">
+                    <td>
+                      <span class="row" style="gap: 8px">
+                        <i :style="{ background: row.tone, width: '9px', height: '9px', borderRadius: '3px', display: 'inline-block' }"></i>
+                        {{ row.name }}
+                      </span>
+                    </td>
+                    <td class="num">{{ integer(row.messages) }}</td>
+                    <td class="num">{{ integer(row.segments) }}</td>
+                    <td class="num">{{ money(row.cost) }}</td>
+                    <td class="num">{{ money(row.average) }}</td>
+                    <td style="min-width: 120px"><ShareMeter :value="row.shareValue" :color="row.tone" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card span-5">
+            <div class="card-header">
+              <div>
                 <div class="card-title">Операторы получателя</div>
                 <div class="card-caption">топ-6 и «Другие»</div>
               </div>
-              <div class="table-wrap">
-                <table class="data">
-                  <thead>
-                    <tr>
-                      <th>Оператор</th>
-                      <th class="num">Сообщений</th>
-                      <th class="num">Сегментов</th>
-                      <th class="num">Счёт</th>
-                      <th>Доля</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="row in topOperators" :key="row.name">
-                      <td>
-                        <span class="row" style="gap: 8px">
-                          <i :style="{ background: row.color, width: '9px', height: '9px', borderRadius: '50%', display: 'inline-block' }"></i>
-                          {{ row.name }}
-                        </span>
-                      </td>
-                      <td class="num">{{ integer(row.messages) }}</td>
-                      <td class="num">{{ integer(row.segments) }}</td>
-                      <td class="num">{{ money(row.cost, 0) }}</td>
-                      <td style="min-width: 110px"><ShareMeter :value="row.shareValue" :color="row.color" /></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="card-caption" style="margin-top: 10px">{{ concentration }}</div>
-            </section>
-          </div>
+            </div>
+            <div class="table-wrap fill">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th>Оператор</th>
+                    <th class="num">Сообщений</th>
+                    <th class="num">Сегментов</th>
+                    <th class="num">Счёт</th>
+                    <th>Доля</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in topOperators" :key="row.name">
+                    <td>
+                      <span class="row" style="gap: 8px">
+                        <i :style="{ background: row.color, width: '9px', height: '9px', borderRadius: '50%', display: 'inline-block' }"></i>
+                        {{ row.name }}
+                      </span>
+                    </td>
+                    <td class="num">{{ integer(row.messages) }}</td>
+                    <td class="num">{{ integer(row.segments) }}</td>
+                    <td class="num">{{ money(row.cost, 0) }}</td>
+                    <td style="min-width: 110px"><ShareMeter :value="row.shareValue" :color="row.color" /></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="concentration" class="card-caption card-footer">{{ concentration }}</div>
+          </section>
         </div>
       </template>
 
@@ -362,26 +349,32 @@ onMounted(() => {
         </section>
 
         <div class="audience-grid">
-          <section class="card">
+          <section class="card audience-card">
             <div class="card-header">
               <div class="card-title">Абоненты по числу сегментов</div>
             </div>
-            <DistributionChart :bars="groupBuckets(segmentation?.subscribers_by_segments ?? [])" :height="200" color="#0d9488" />
+            <div class="chart-fit">
+              <DistributionChart :bars="groupBuckets(segmentation?.subscribers_by_segments ?? [])" :height="200" color="#0d9488" />
+            </div>
           </section>
-          <section class="card">
+          <section class="card audience-card">
             <div class="card-header">
               <div class="card-title">Абоненты по операторам</div>
             </div>
-            <DonutChart :slices="subscriberDonut" :height="210" :center-label="integer(segmentation?.subscribers ?? 0)" />
+            <div class="chart-fit">
+              <DonutChart :slices="subscriberDonut" :height="210" :center-label="integer(segmentation?.subscribers ?? 0)" />
+            </div>
           </section>
-          <section class="card">
+          <section class="card audience-card">
             <div class="card-header">
               <div class="card-title">Сообщения по числу сегментов</div>
             </div>
-            <DistributionChart :bars="groupBuckets(segmentation?.messages_by_segments ?? [])" :height="200" color="#b45309" />
+            <div class="chart-fit">
+              <DistributionChart :bars="groupBuckets(segmentation?.messages_by_segments ?? [])" :height="200" color="#b45309" />
+            </div>
           </section>
         </div>
-        <p class="card-caption">{{ subscribersNote }}</p>
+        <p class="card-caption audience-note">{{ subscribersNote }}</p>
       </template>
 
       <details v-if="summary.warnings.length" class="card warnings">
@@ -448,22 +441,16 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-.donuts {
-  display: grid;
-  gap: calc(var(--space) * 1.5);
-  margin-top: calc(var(--space) * 1.5);
+.structure-fit {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.audience-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: calc(var(--space) * 2);
-  align-items: stretch;
-}
-
-@media (max-width: 1180px) {
-  .audience-grid {
-    grid-template-columns: 1fr;
-  }
+.audience-note {
+  margin: 0;
+  padding: 0 2px;
 }
 </style>

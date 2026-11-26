@@ -372,7 +372,7 @@ function chooseTheme(theme: Theme): void {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: calc(var(--space) * 2);
-  align-items: start;
+  align-items: stretch;
 }
 
 .settings-grid > section:last-child:nth-child(odd) {

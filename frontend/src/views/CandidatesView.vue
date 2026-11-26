@@ -146,8 +146,8 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <section class="card">
-        <div class="table-wrap" style="max-height: 420px">
+      <section class="card table-card">
+        <div class="table-wrap sticky-first" style="max-height: 430px">
           <table class="data">
             <thead>
               <tr>
@@ -168,8 +168,8 @@ onMounted(() => {
                 :class="[benefitClass(candidate.net_monthly), { 'selected-row': candidate.candidate_id === selectedId }]"
                 @click="selectedId = candidate.candidate_id"
               >
-                <td>
-                  <button class="link-button" type="button" :title="candidate.template_text" @click.stop="openMessages(candidate)">
+                <td style="min-width: 360px; max-width: 460px">
+                  <button class="link-button cell-clamp" type="button" :title="candidate.template_text" @click.stop="openMessages(candidate)">
                     {{ candidate.template_text }}
                   </button>
                 </td>
@@ -199,51 +199,25 @@ onMounted(() => {
         </div>
       </section>
 
-      <div class="lower-grid">
-        <section class="card">
-          <div class="benefit-total">
-            <div class="benefit-total-value" :class="profitableTotal > 0 ? 'positive' : ''">
-              {{ money(profitableTotal, 0) }}
-            </div>
-            <div class="benefit-total-label">Выгода в месяц от внедрения выгодных кандидатов</div>
+      <div class="candidate-grid">
+        <section class="card span-4 total-card">
+          <div class="total-value" :class="profitableTotal > 0 ? 'positive' : ''">
+            {{ money(profitableTotal, 0) }} <span>₽/мес</span>
           </div>
+          <div class="total-label">Выгода в месяц от внедрения выгодных кандидатов</div>
 
-          <div v-if="selected" class="details">
-            <div class="details-title">Выбранный кандидат</div>
-            <p class="tiny muted">{{ period(selected.period_from, selected.period_to) }}</p>
-            <div class="details-grid">
-              <span>Сообщений</span><strong>{{ integer(selected.messages) }}</strong>
-              <span>Сегментов</span><strong>{{ integer(selected.segments) }}</strong>
-              <span>Стоимость/мес</span><strong>{{ money(selected.monthly_actual_cost) }}</strong>
-              <span>Если шаблон/мес</span><strong>{{ money(selected.monthly_templated_cost) }}</strong>
-              <span>Экономия/мес</span><strong>{{ money(selected.monthly_saving) }}</strong>
-              <span>Шаблон/мес</span><strong>{{ money(selected.template_fee) }}</strong>
-              <span>Выгода/мес</span>
-              <strong :class="Number(selected.net_monthly) >= 0 ? 'positive' : 'negative'">
-                {{ money(selected.net_monthly) }}
-              </strong>
-              <span>Уверенность</span><strong>{{ share(selected.confidence, 0) }} · {{ confidenceLabel }}</strong>
-              <span>Покрытие</span><strong>{{ share(selected.coverage, 0) }}</strong>
-              <span>Операторы</span><strong>{{ selected.operators.length ? selected.operators.join(', ') : 'все' }}</strong>
-              <span>Чужие совпадения</span><strong>{{ integer(selected.foreign_matches) }}</strong>
-            </div>
-
-            <div v-if="selected.warnings.length" class="details-block">
-              <div class="details-title">Предупреждения</div>
-              <ul class="tiny">
-                <li v-for="warning in selected.warnings" :key="warning">{{ warning }}</li>
-              </ul>
-            </div>
-            <div v-if="selected.examples.length" class="details-block">
-              <div class="details-title">Примеры сообщений</div>
-              <ul class="examples">
-                <li v-for="example in selected.examples" :key="example">{{ example }}</li>
-              </ul>
-            </div>
+          <div v-if="selected" class="total-facts">
+            <div><span>Сообщений</span><strong>{{ integer(selected.messages) }}</strong></div>
+            <div><span>Сегментов</span><strong>{{ integer(selected.segments) }}</strong></div>
+            <div><span>Экономия/мес</span><strong>{{ money(selected.monthly_saving) }}</strong></div>
+            <div><span>Шаблон/мес</span><strong>{{ money(selected.template_fee) }}</strong></div>
+          </div>
+          <div v-if="selected" class="total-footer">
+            <span class="badge" :title="selected.status">{{ confidenceLabel }}</span>
           </div>
         </section>
 
-        <section class="card">
+        <section class="card span-8 chart-card">
           <div class="card-header">
             <div>
               <div class="card-title">Сегменты по дням</div>
@@ -254,15 +228,70 @@ onMounted(() => {
               Только шаблонированные
             </label>
           </div>
-          <SegmentChart
-            v-if="selected"
-            :base="chartBase"
-            :matched="selected.daily_segments"
-            :caption="chartCaption"
-            matched-label="Сообщения кандидата"
-            :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
-            :height="230"
-          />
+          <div v-if="selected" class="chart-fit">
+            <SegmentChart
+              :base="chartBase"
+              :matched="selected.daily_segments"
+              :caption="chartCaption"
+              matched-label="Сообщения кандидата"
+              :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
+              :height="260"
+            />
+          </div>
+          <div v-else class="empty">Выберите кандидата в таблице</div>
+        </section>
+
+        <section class="card span-7">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Выбранный кандидат</div>
+              <div class="card-caption">{{ selected ? period(selected.period_from, selected.period_to) : 'кандидат не выбран' }}</div>
+            </div>
+          </div>
+          <div v-if="selected" class="facts">
+            <div class="fact"><span>Сообщений</span><strong>{{ integer(selected.messages) }}</strong></div>
+            <div class="fact"><span>Сегментов</span><strong>{{ integer(selected.segments) }}</strong></div>
+            <div class="fact"><span>Стоимость/мес</span><strong>{{ money(selected.monthly_actual_cost) }}</strong></div>
+            <div class="fact"><span>Если шаблон/мес</span><strong>{{ money(selected.monthly_templated_cost) }}</strong></div>
+            <div class="fact"><span>Экономия/мес</span><strong>{{ money(selected.monthly_saving) }}</strong></div>
+            <div class="fact"><span>Шаблон/мес</span><strong>{{ money(selected.template_fee) }}</strong></div>
+            <div class="fact">
+              <span>Выгода/мес</span>
+              <strong :class="Number(selected.net_monthly) >= 0 ? 'positive' : 'negative'">{{ money(selected.net_monthly) }}</strong>
+            </div>
+            <div class="fact"><span>Уверенность</span><strong>{{ share(selected.confidence, 0) }}</strong></div>
+            <div class="fact"><span>Покрытие</span><strong>{{ share(selected.coverage, 0) }}</strong></div>
+            <div class="fact"><span>Чужие совпадения</span><strong>{{ integer(selected.foreign_matches) }}</strong></div>
+            <div class="fact wide"><span>Операторы</span><strong>{{ selected.operators.length ? selected.operators.join(', ') : 'все' }}</strong></div>
+            <div class="fact wide"><span>Статус</span><strong>{{ confidenceLabel }}</strong></div>
+          </div>
+          <div v-else class="empty">Выберите кандидата в таблице</div>
+
+          <div v-if="selected && selected.warnings.length" class="details-block">
+            <div class="details-title">Предупреждения</div>
+            <ul class="tiny">
+              <li v-for="warning in selected.warnings" :key="warning">{{ warning }}</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="card span-5">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Шаблон-кандидат и примеры</div>
+              <div class="card-caption">текст для регистрации и реальные сообщения</div>
+            </div>
+          </div>
+          <template v-if="selected">
+            <div class="candidate-pattern">{{ selected.template_text }}</div>
+            <div v-if="selected.examples.length" class="details-block">
+              <div class="details-title">Примеры сообщений</div>
+              <ul class="examples">
+                <li v-for="example in selected.examples" :key="example">{{ example }}</li>
+              </ul>
+            </div>
+            <div v-else class="empty">Примеры сообщений не сохранены</div>
+          </template>
           <div v-else class="empty">Выберите кандидата в таблице</div>
         </section>
       </div>
@@ -288,20 +317,28 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.lower-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: calc(var(--space) * 2);
-  align-items: start;
+.table-card {
+  padding: 0;
+  overflow: hidden;
 }
 
-.benefit-total {
-  padding: calc(var(--space) * 1.5) 0 calc(var(--space) * 1.5);
-  border-bottom: var(--border-width) solid var(--border);
-  margin-bottom: calc(var(--space) * 1.5);
+.table-card > .table-wrap {
+  border: none;
+  border-radius: calc(var(--radius-lg) - 1px);
 }
 
-.benefit-total-value {
+.chart-card > .empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.total-card {
+  justify-content: flex-start;
+}
+
+.total-value {
   font-family: var(--font-heading);
   font-size: 34px;
   font-weight: 800;
@@ -310,28 +347,84 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.benefit-total-label {
+.total-value span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.total-label {
   color: var(--text-muted);
   font-size: 12px;
   margin-top: 6px;
+  line-height: 1.45;
+}
+
+.total-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--space) * 1.25);
+  margin-top: calc(var(--space) * 2);
+  padding-top: calc(var(--space) * 1.5);
+  border-top: var(--border-width) solid var(--border);
+}
+
+.total-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.total-facts span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.total-facts strong {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-footer {
+  margin-top: auto;
+  padding-top: calc(var(--space) * 1.5);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--space) * 1.25) calc(var(--space) * 2);
+}
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12px;
+}
+
+.fact.wide {
+  grid-column: 1 / -1;
+}
+
+.fact span {
+  color: var(--text-muted);
+}
+
+.fact strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .details-title {
   font-weight: 700;
   font-size: 12px;
   margin-bottom: 6px;
-}
-
-.details-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 14px;
-  font-size: 12px;
-  align-items: baseline;
-}
-
-.details-grid span {
-  color: var(--text-muted);
 }
 
 .details-block {
@@ -344,14 +437,31 @@ onMounted(() => {
   line-height: 1.5;
 }
 
+.candidate-pattern {
+  background: var(--surface-alt);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 1.25) calc(var(--space) * 1.5);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  margin-bottom: calc(var(--space) * 0.5);
+}
+
 .examples li {
   margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
 
 @media (max-width: 1180px) {
-  .lower-grid {
+  .facts,
+  .total-facts {
     grid-template-columns: 1fr;
+  }
+
+  .fact.wide {
+    grid-column: auto;
   }
 }
 </style>
