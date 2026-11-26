@@ -244,7 +244,7 @@ onMounted(() => {
                 </td>
                 <td>
                   <span class="badge" :title="metric.operators.length ? metric.operators.join(', ') : 'все операторы'">
-                    {{ metric.operators.length ? metric.operators.join(', ') : 'все' }}
+                    <span class="badge-text">{{ metric.operators.length ? metric.operators.join(', ') : 'все' }}</span>
                   </span>
                 </td>
                 <td class="num">{{ integer(metric.matched_messages) }}</td>

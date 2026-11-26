@@ -583,18 +583,32 @@ table.data th.num {
   color: var(--accent);
 }
 
-/* Длинный текст шаблона занимает не больше двух строк, полный текст — в подсказке. */
+/* Длинный текст шаблона обрезается в одну строку, как в десктопной таблице;
+   полный текст доступен в подсказке и в окне сообщений. */
 .cell-clamp {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
   overflow: hidden;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.link-button.cell-clamp {
-  max-width: 100%;
+.table-card table.data tbody td {
+  height: 38px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.table-card table.data tbody td > .badge {
+  max-width: 170px;
+}
+
+.badge-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 table.data tbody tr.row-benefit-1 {
