@@ -98,10 +98,11 @@ class MatchedMessagesDialog(QDialog):
         title: str,
         template_text: str,
         template_label: str = "Полный текст шаблона:",
+        text_label: str | None = None,
     ) -> None:
         """Показать сообщения, заголовок окна и текст шаблона целиком."""
         self.setWindowTitle(title)
-        self._template_label.setText(template_label)
+        self._template_label.setText(text_label or template_label)
         self._template_text.setPlainText(template_text)
         self._copy_status.clear()
         self._model.set_rows(rows)

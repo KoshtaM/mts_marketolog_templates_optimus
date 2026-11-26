@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from mts_templates.composition import Container
 from mts_templates.presentation.desktop.theme import apply_theme as apply_app_theme
+from mts_templates.presentation.desktop.widgets.action_center_page import ActionCenterPage
 from mts_templates.presentation.desktop.widgets.candidates_page import CandidatesPage
 from mts_templates.presentation.desktop.widgets.dashboard_page import DashboardPage
 from mts_templates.presentation.desktop.widgets.export_page import ExportPage
@@ -64,6 +65,12 @@ class MainWindow(QMainWindow):
             settings_provider=container.settings_store.load,
             runner=self._runner,
         )
+        self._action_center_page = ActionCenterPage(
+            action_center=container.action_center,
+            matched_messages=container.matched_messages,
+            list_batches=container.list_batches,
+            runner=self._runner,
+        )
         self._export_page = ExportPage(
             export_report=container.export_report,
             list_batches=container.list_batches,
@@ -80,6 +87,7 @@ class MainWindow(QMainWindow):
         self._add_page(self._dashboard_page, "Дашборд")
         self._add_page(self._templates_page, "Шаблоны")
         self._add_page(self._candidates_page, "Кандидаты")
+        self._add_page(self._action_center_page, "Центр действий")
         self._add_page(self._export_page, "Экспорт")
         self._add_page(self._settings_page, "Настройки")
 
@@ -130,6 +138,7 @@ class MainWindow(QMainWindow):
         self._dashboard_page.apply_theme(theme)
         self._templates_page.refresh_theme()
         self._candidates_page.refresh_theme()
+        self._action_center_page.refresh_theme()
         self.update()
 
     def _on_theme_changed(self, theme_id: str) -> None:
@@ -140,6 +149,7 @@ class MainWindow(QMainWindow):
         self._dashboard_page.reload()
         self._templates_page.reload()
         self._candidates_page.reload()
+        self._action_center_page.reload()
         self._export_page.reload()
         self.statusBar().showMessage("Данные обновлены.", 5000)
 
