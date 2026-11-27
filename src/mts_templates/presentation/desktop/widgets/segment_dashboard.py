@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -84,6 +85,21 @@ class DashboardSeries:
     drift: DashboardDrift | None = None
 
 
+class DriftTitleLabel(QLabel):
+    """Красная надпись о дрейфе: клик по ней раскрывает сравнение текстов."""
+
+    clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWordWrap(True)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+
 class DriftNotice(QFrame):
     """Пометка о дрейфе текста шаблона с наглядным местом изменения."""
 
@@ -92,8 +108,9 @@ class DriftNotice(QFrame):
         self.setObjectName("dashboardDriftNotice")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._drift: DashboardDrift | None = None
+        self._details_visible = False
 
-        self._title = QLabel(self)
+        self._title = DriftTitleLabel(self)
         self._title.setWordWrap(True)
         self._before = QLabel(self)
         self._before.setWordWrap(True)
@@ -111,11 +128,19 @@ class DriftNotice(QFrame):
 
         self.setVisible(False)
         self.refresh_theme()
+        self._title.clicked.connect(self._on_title_clicked)
 
     def set_drift(self, drift: DashboardDrift | None) -> None:
         """Показать дрейф или скрыть пометку, если изменений нет."""
         self._drift = drift
         self.setVisible(drift is not None)
+        if drift is None:
+            self._details_visible = False
+        self._render()
+
+    def _on_title_clicked(self) -> None:
+        """Раскрыть или свернуть сравнение «Было» / «Стало»."""
+        self._details_visible = not self._details_visible
         self._render()
 
     def refresh_theme(self) -> None:
@@ -126,7 +151,7 @@ class DriftNotice(QFrame):
             f"border: 1px solid {palette.warning}; border-radius: 8px; }}"
         )
         self._title.setStyleSheet(
-            f"color: {semantic_text(palette.warning, palette.surface_alt)}; "
+            f"color: {semantic_text(palette.negative, palette.surface_alt)}; "
             "font-size: 12px; font-weight: 600;"
         )
         text_color = readable_text_color(palette.surface_alt)
@@ -140,12 +165,16 @@ class DriftNotice(QFrame):
             self._title.setText("")
             self._before.setText("")
             self._after.setText("")
+            self._before.setVisible(False)
+            self._after.setVisible(False)
             return
         palette = active_palette()
-        self._title.setText(f"Текст сообщений изменился · похожесть {drift.similarity * 100:.0f} %")
+        self._title.setText("Дрейф шаблона")
         self._title.setToolTip(drift.candidate_text)
         self._before.setText("Было: " + _fragments_html(drift.before, palette))
         self._after.setText("Стало: " + _fragments_html(drift.after, palette))
+        self._before.setVisible(self._details_visible)
+        self._after.setVisible(self._details_visible)
 
 
 def _fragments_html(fragments: Sequence[DashboardDriftFragment], palette: ThemePalette) -> str:

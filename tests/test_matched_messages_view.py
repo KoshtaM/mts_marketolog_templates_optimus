@@ -53,7 +53,7 @@ def test_templates_table_layout() -> None:
     assert titles[-1] == "Отправитель"
     assert set(titles).issuperset({"Достав.", "Срабат.", "% Срабат."})
     assert not set(titles).intersection({"Доставлено", "Срабатываний", "Срабатывание"})
-    assert "Дрейф" in titles
+    assert "Дрейф" not in titles
     assert widths["Сообщений"] == 50
     assert widths["Достав."] == 57
     assert widths["Срабат."] == 67

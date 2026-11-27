@@ -61,15 +61,25 @@ def test_drift_notice_is_hidden_without_drift() -> None:
     notice.set_drift(None)
 
     assert notice.isHidden()
+    assert notice._before.isHidden()
+    assert notice._after.isHidden()
 
 
-def test_drift_notice_shows_similarity_and_places_of_change() -> None:
+def test_drift_notice_shows_red_title_and_reveals_fragments_on_click() -> None:
     notice = DriftNotice()
 
     notice.set_drift(_drift())
 
     assert not notice.isHidden()
-    assert "86 %" in notice._title.text()
-    assert "line-through" not in notice._before.text()
+    assert notice._title.text() == "Дрейф шаблона"
+    assert notice._before.isHidden()
+    assert notice._after.isHidden()
+
+    notice._title.clicked.emit()
+
+    assert not notice._before.isHidden()
+    assert not notice._after.isHidden()
+    assert "Было:" in notice._before.text()
+    assert "Стало:" in notice._after.text()
     assert "новый" in notice._after.text()
-    assert notice._title.toolTip() == "Ваш новый код %d"
+    assert "код" in notice._before.text()

@@ -18,6 +18,7 @@ import {
 import type { DaySegments, DriftFragment, TemplateMetrics, TemplateTrend } from '../types'
 
 const selectedId = ref('')
+const driftOpen = ref(false)
 const filter = ref('')
 const templatedOnly = ref(false)
 const sortKey = ref('monthly_net_benefit')
@@ -35,7 +36,6 @@ interface Header {
 const headers: Header[] = [
   { key: 'text', label: 'Шаблон' },
   { key: 'operators', label: 'Операторы' },
-  { key: 'drift', label: 'Дрейф' },
   { key: 'matched_messages', label: 'Сообщений', narrow: true },
   { key: 'delivered_messages', label: 'Достав.', narrow: true },
   { key: 'triggered_messages', label: 'Срабат.', narrow: true },
@@ -186,6 +186,7 @@ const trendMetric = ref<'segments' | 'trigger_rate' | 'net_benefit'>('trigger_ra
 watch(
   () => selectedId.value,
   (templateId) => {
+    driftOpen.value = false
     if (templateId) void loadTemplateTrend(templateId)
   },
 )
@@ -269,7 +270,6 @@ onMounted(() => {
                     <span class="badge-text">{{ metric.operators.length ? metric.operators.join(', ') : 'все' }}</span>
                   </span>
                 </td>
-                <td class="num">{{ metric.drift ? '✓' : '✗' }}</td>
                 <td class="num">{{ integer(metric.matched_messages) }}</td>
                 <td class="num">{{ integer(metric.delivered_messages) }}</td>
                 <td class="num">{{ integer(metric.triggered_messages) }}</td>
@@ -311,29 +311,31 @@ onMounted(() => {
             </label>
           </div>
           <div v-if="selected?.drift" class="drift-alert">
-            <div class="drift-title">
-              Текст сообщений изменился · похожесть {{ share(selected.drift.similarity) }}
+            <div class="drift-title" @click="driftOpen = !driftOpen">
+              Дрейф шаблона · похожесть {{ share(selected.drift.similarity) }}
             </div>
-            <div class="drift-line">
-              <span class="drift-label">Было</span>
-              <span class="drift-text">
-                <span
-                  v-for="(fragment, index) in selected.drift.template_fragments"
-                  :key="`before-${index}`"
-                  :class="driftClass(fragment.kind)"
-                >{{ fragment.text }}</span>
-              </span>
-            </div>
-            <div class="drift-line">
-              <span class="drift-label">Стало</span>
-              <span class="drift-text">
-                <span
-                  v-for="(fragment, index) in selected.drift.candidate_fragments"
-                  :key="`after-${index}`"
-                  :class="driftClass(fragment.kind)"
-                >{{ fragment.text }}</span>
-              </span>
-            </div>
+            <template v-if="driftOpen">
+              <div class="drift-line">
+                <span class="drift-label">Было</span>
+                <span class="drift-text">
+                  <span
+                    v-for="(fragment, index) in selected.drift.template_fragments"
+                    :key="`before-${index}`"
+                    :class="driftClass(fragment.kind)"
+                  >{{ fragment.text }}</span>
+                </span>
+              </div>
+              <div class="drift-line">
+                <span class="drift-label">Стало</span>
+                <span class="drift-text">
+                  <span
+                    v-for="(fragment, index) in selected.drift.candidate_fragments"
+                    :key="`after-${index}`"
+                    :class="driftClass(fragment.kind)"
+                  >{{ fragment.text }}</span>
+                </span>
+              </div>
+            </template>
           </div>
           <div v-if="selected" class="chart-fit">
             <SegmentChart
@@ -565,15 +567,16 @@ onMounted(() => {
 .drift-alert {
   margin: 0 0 calc(var(--space) * 1.25);
   padding: calc(var(--space) * 1.25) calc(var(--space) * 1.75);
-  border: var(--border-width) solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border: var(--border-width) solid color-mix(in srgb, var(--negative) 45%, transparent);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+  background: color-mix(in srgb, var(--negative) 8%, transparent);
 }
 
 .drift-title {
   font-size: 13px;
   font-weight: 700;
-  color: var(--warning);
+  color: var(--negative);
+  cursor: pointer;
 }
 
 .drift-line {

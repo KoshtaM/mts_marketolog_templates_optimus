@@ -111,16 +111,6 @@ COLUMNS = (
     ),
     Column("Активен", lambda item: item.active, width=65),
     Column(
-        "Дрейф",
-        lambda item: item.drift is not None,
-        width=70,
-        tooltip=lambda item: (
-            f"Кандидат: {item.drift.candidate_id} · похожесть {item.drift.similarity:.0%}"
-            if item.drift is not None
-            else "Дрейф не обнаружен: текст сообщений не изменялся"
-        ),
-    ),
-    Column(
         "Сообщений",
         lambda item: item.matched_messages,
         formatter=format_int,
