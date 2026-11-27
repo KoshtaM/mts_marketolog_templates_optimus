@@ -76,6 +76,21 @@ export function period(from: string | null | undefined, to: string | null | unde
   return `${date(from)} — ${date(to)}`
 }
 
+export function batchName(batch: {
+  name: string | null
+  source_name: string
+}): string {
+  return batch.name || batch.source_name
+}
+
+export function batchPeriod(batch: {
+  period_label: string | null
+  period_from: string | null | undefined
+  period_to: string | null | undefined
+}): string {
+  return batch.period_label || period(batch.period_from, batch.period_to)
+}
+
 export function plural(value: number, one: string, few: string, many: string): string {
   const mod10 = value % 10
   const mod100 = value % 100

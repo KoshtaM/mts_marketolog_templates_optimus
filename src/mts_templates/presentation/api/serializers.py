@@ -81,6 +81,8 @@ def batch_to_dict(batch: ImportBatch) -> dict[str, Any]:
         "period_from": moment(batch.period_from),
         "period_to": moment(batch.period_to),
         "status": batch.status,
+        "name": batch.name,
+        "period_label": batch.period_label,
         "warnings": list(batch.warnings),
         "segment_count": batch.segment_count,
         "duplicate_message_ids": batch.duplicate_message_ids,

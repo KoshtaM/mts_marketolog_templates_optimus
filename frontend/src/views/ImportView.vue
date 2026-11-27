@@ -1,16 +1,57 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { api } from '../api'
+import BatchDialog from '../components/BatchDialog.vue'
 import BusyOverlay from '../components/BusyOverlay.vue'
-import { date, dateTime, integer, money, period } from '../format'
+import { batchName, date, dateTime, integer, money, period } from '../format'
 import {
+  deleteAllBatches,
+  deleteBatch,
   isBusy,
   loadDashboard,
   loadTemplates,
+  renameBatch,
   reportError,
+  setBatchPeriodLabel,
   state,
 } from '../store'
 import type { ImportReport, TemplateFilePreview, TemplateImportReport } from '../types'
+
+const editor = ref<{ batchId: string; kind: 'name' | 'period_label'; initial: string | null } | null>(null)
+
+async function openEditor(batchId: string, kind: 'name' | 'period_label'): Promise<void> {
+  const batch = state.batches.find((item) => item.id === batchId)
+  if (!batch) return
+  editor.value = { batchId, kind, initial: kind === 'name' ? batch.name : batch.period_label }
+}
+
+async function onEditorSave(value: string | null): Promise<void> {
+  if (!editor.value) return
+  const { batchId, kind } = editor.value
+  if (kind === 'name') {
+    await renameBatch(batchId, value)
+  } else {
+    await setBatchPeriodLabel(batchId, value)
+  }
+  editor.value = null
+}
+
+function onEditorCancel(): void {
+  editor.value = null
+}
+
+async function onDeleteBatch(batchId: string): Promise<void> {
+  if (!window.confirm('Удалить загрузку? Сообщения и результаты анализа будут удалены безвозвратно.')) {
+    return
+  }
+  await deleteBatch(batchId)
+}
+
+async function onDeleteAll(): Promise<void> {
+  if (!state.batches.length) return
+  if (!window.confirm(`Удалить все загрузки статистики (${state.batches.length})?`)) return
+  await deleteAllBatches()
+}
 
 const statisticsInput = ref<HTMLInputElement | null>(null)
 const templatesInput = ref<HTMLInputElement | null>(null)
@@ -262,19 +303,27 @@ function resetPreview(): void {
           <div class="card-caption">Все импортированные файлы в локальной базе</div>
         </div>
         <button class="btn" type="button" :disabled="working" @click="loadDashboard(state.batchId)">Обновить</button>
+        <button class="btn" type="button" :disabled="working || !state.batches.length" @click="onDeleteAll">
+          Удалить все
+        </button>
       </div>
+      <p v-if="state.batches.length" class="field-hint" style="margin: 10px 0">
+        Удаление загрузки удаляет сообщения, биллинговые строки и результаты анализа безвозвратно.
+        Шаблоны и настройки при этом не трогаются. Исходный файл на диске не удаляется.
+      </p>
       <div v-if="!state.batches.length" class="empty">Загрузок пока нет</div>
       <div v-else class="table-wrap">
         <table class="data">
           <thead>
             <tr>
-              <th>Файл</th>
-              <th>Импортирован</th>
-              <th>Период</th>
+              <th>Загрузка</th>
               <th class="num">Сообщений</th>
               <th class="num">Сегментов</th>
               <th class="num">Стоимость</th>
+              <th>Импортирован</th>
+              <th>Период</th>
               <th>Статус</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -285,17 +334,55 @@ function resetPreview(): void {
               style="cursor: pointer"
               @click="loadDashboard(batch.id)"
             >
-              <td>{{ batch.source_name }}</td>
-              <td>{{ dateTime(batch.imported_at) }}</td>
-              <td>{{ date(batch.period_from) }} — {{ date(batch.period_to) }}</td>
+              <td>
+                <div class="cell-text" :title="batch.source_name">{{ batchName(batch) }}</div>
+              </td>
               <td class="num">{{ integer(batch.message_count) }}</td>
               <td class="num">{{ integer(batch.segment_count) }}</td>
               <td class="num">{{ money(batch.total_cost, 0) }}</td>
+              <td>{{ dateTime(batch.imported_at) }}</td>
+              <td>{{ period(batch.period_from, batch.period_to) }}</td>
               <td><span class="badge">{{ batch.status }}</span></td>
+              <td class="num" @click.stop>
+                <button
+                  class="btn btn-ghost"
+                  type="button"
+                  title="Переименовать"
+                  @click="openEditor(batch.id, 'name')"
+                >
+                  ✎
+                </button>
+                <button
+                  class="btn btn-ghost"
+                  type="button"
+                  title="Метка периода"
+                  @click="openEditor(batch.id, 'period_label')"
+                >
+                  ≡
+                </button>
+                <button
+                  class="btn btn-ghost"
+                  type="button"
+                  title="Удалить"
+                  @click="onDeleteBatch(batch.id)"
+                >
+                  🗑
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
+      <BatchDialog
+        v-if="editor"
+        :key="editor.batchId"
+        :title="editor.kind === 'name' ? 'Переименовать загрузку' : 'Метка периода'"
+        :label="editor.kind === 'name' ? 'Название загрузки' : 'Метка периода'"
+        :placeholder="editor.kind === 'name' ? 'Например, «Октябрь — полная выгрузка»' : 'Например, «Октябрь 2026»'"
+        :initial="editor.initial"
+        @save="onEditorSave"
+        @cancel="onEditorCancel"
+      />
     </section>
   </div>
 </template>

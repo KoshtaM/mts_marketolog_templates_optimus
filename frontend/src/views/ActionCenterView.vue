@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import BusyOverlay from '../components/BusyOverlay.vue'
 import KpiCard from '../components/KpiCard.vue'
 import MatchedMessagesDialog from '../components/MatchedMessagesDialog.vue'
-import { integer, money, moneyValue, period } from '../format'
+import { batchName, batchPeriod, integer, money, moneyValue, period } from '../format'
 import { isBusy, loadActionCenter, selectBatch, state } from '../store'
 import type { ActionItem, ActionKind } from '../types'
 
@@ -173,7 +173,7 @@ watch(
         <select class="select" style="width: auto; max-width: 340px" :value="state.batchId" @change="onBatch">
           <option v-if="!state.batches.length" value="">Нет загрузок</option>
           <option v-for="batch in state.batches" :key="batch.id" :value="batch.id">
-            {{ batch.source_name }}
+            {{ batchName(batch) }} · {{ batchPeriod(batch) }}
           </option>
         </select>
         <button class="btn" type="button" :disabled="isBusy || !hasBatch" @click="refresh">

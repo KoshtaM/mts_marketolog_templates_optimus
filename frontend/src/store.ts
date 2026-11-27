@@ -181,6 +181,69 @@ export async function selectBatch(batchId: string): Promise<void> {
   await loadDashboard(batchId)
 }
 
+export async function renameBatch(batchId: string, name: string | null): Promise<void> {
+  try {
+    const updated = await withBusy('Переименование загрузки…', () => api.renameBatch(batchId, name))
+    state.batches = state.batches.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+    if (state.batchId === updated.id) {
+      state.dashboard = state.dashboard ? { ...state.dashboard, batch: updated } : state.dashboard
+    }
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+export async function setBatchPeriodLabel(batchId: string, periodLabel: string | null): Promise<void> {
+  try {
+    const updated = await withBusy(
+      'Метка периода…',
+      () => api.setBatchPeriodLabel(batchId, periodLabel),
+    )
+    state.batches = state.batches.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+    if (state.batchId === updated.id) {
+      state.dashboard = state.dashboard ? { ...state.dashboard, batch: updated } : state.dashboard
+    }
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+export async function deleteBatch(batchId: string): Promise<void> {
+  try {
+    await withBusy('Удаление загрузки…', () => api.deleteBatch(batchId))
+    const batches = (await api.batches()).batches
+    state.batches = batches
+    state.analysis = null
+    state.analysisBatchId = ''
+    state.actionCenter = null
+    state.actionCenterBatchId = ''
+    if (state.batchId === batchId) {
+      state.batchId = batches[0]?.id ?? ''
+    }
+    await loadDashboard(state.batchId)
+    await loadTemplates()
+  } catch (error) {
+    reportError(error)
+  }
+}
+
+export async function deleteAllBatches(): Promise<void> {
+  try {
+    await withBusy('Удаление загрузок…', () => api.deleteAllBatches())
+    state.batches = []
+    state.batchId = ''
+    state.dashboard = null
+    state.analysis = null
+    state.analysisBatchId = ''
+    state.actionCenter = null
+    state.actionCenterBatchId = ''
+    localStorage.removeItem(BATCH_KEY)
+    await loadTemplates()
+  } catch (error) {
+    reportError(error)
+  }
+}
+
 export async function loadTemplates(): Promise<void> {
   try {
     const response = await api.templates()

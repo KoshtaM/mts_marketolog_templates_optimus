@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { api } from '../api'
 import BusyOverlay from '../components/BusyOverlay.vue'
-import { date, integer, money, period, share } from '../format'
+import { batchName, batchPeriod, date, integer, money, period, share } from '../format'
 import {
   isBusy,
   loadDashboard,
@@ -60,7 +60,7 @@ async function download(): Promise<void> {
         <select class="select" style="width: auto; max-width: 360px" :value="state.batchId" @change="onBatch">
           <option v-if="!state.batches.length" value="">Нет загрузок</option>
           <option v-for="item in state.batches" :key="item.id" :value="item.id">
-            {{ item.source_name }} · {{ date(item.period_from) }} — {{ date(item.period_to) }}
+            {{ batchName(item) }} · {{ batchPeriod(item) }}
           </option>
         </select>
         <button class="btn btn-primary" type="button" :disabled="!batch || exporting" @click="download">
@@ -81,7 +81,7 @@ async function download(): Promise<void> {
           <div class="card-header">
             <div>
               <div class="card-title">Содержимое отчёта</div>
-              <div class="card-caption">{{ batch.source_name }} · {{ period(batch.period_from, batch.period_to) }}</div>
+              <div class="card-caption">{{ batchName(batch) }} · {{ period(batch.period_from, batch.period_to) }}</div>
             </div>
           </div>
           <ul class="report-list">
@@ -122,7 +122,7 @@ async function download(): Promise<void> {
             <div class="card-title">Загрузка</div>
           </div>
           <div class="details-grid">
-            <span>Файл</span><strong>{{ batch.source_name }}</strong>
+            <span>Файл</span><strong>{{ batchName(batch) }}</strong>
             <span>Импортирован</span><strong>{{ date(batch.imported_at) }}</strong>
             <span>Период</span><strong>{{ period(batch.period_from, batch.period_to) }}</strong>
             <span>Сообщений</span><strong>{{ integer(statistics?.message_count ?? 0) }}</strong>

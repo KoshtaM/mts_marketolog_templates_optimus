@@ -8,7 +8,7 @@ import ShareMeter from '../components/ShareMeter.vue'
 import StackedBarChart from '../components/StackedBarChart.vue'
 import StructureBars from '../components/StructureBars.vue'
 import { groupBuckets } from '../distribution'
-import { date, integer, money, moneyValue, period, share } from '../format'
+import { batchName, batchPeriod, date, integer, money, moneyValue, period, share } from '../format'
 import { isBusy, loadDashboard, refreshAll, selectBatch, state } from '../store'
 import { ORDINARY_COLOR, TEMPLATED_COLOR, operatorColor } from '../theme'
 
@@ -161,7 +161,7 @@ onMounted(() => {
         <h1 class="page-title">Дашборд</h1>
         <div class="page-subtitle">
           <template v-if="summary?.batch">
-            {{ summary.batch.source_name }} · {{ period(summary.batch.period_from, summary.batch.period_to) }}
+            {{ batchName(summary.batch) }} · {{ period(summary.batch.period_from, summary.batch.period_to) }}
           </template>
           <template v-else>Загрузите статистику, чтобы увидеть сводку</template>
         </div>
@@ -170,7 +170,7 @@ onMounted(() => {
         <select class="select" style="width: auto; max-width: 340px" :value="state.batchId" @change="onBatch">
           <option v-if="!state.batches.length" value="">Нет загрузок</option>
           <option v-for="batch in state.batches" :key="batch.id" :value="batch.id">
-            {{ batch.source_name }} · {{ date(batch.period_from) }} — {{ date(batch.period_to) }}
+            {{ batchName(batch) }} · {{ batchPeriod(batch) }}
           </option>
         </select>
         <div class="segmented" role="group" aria-label="Вид дашборда">

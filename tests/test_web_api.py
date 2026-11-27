@@ -87,6 +87,40 @@ def test_statistics_import_and_dashboard(client: TestClient, tmp_path: Path) -> 
     assert summary["daily_segments"][0]["operators"][0]["operator"] == "MTS"
 
 
+def test_batch_management_endpoints(client: TestClient, tmp_path: Path) -> None:
+    batch_id = _prepare_batch(client, tmp_path)
+
+    renamed = client.put(f"/api/batches/{batch_id}/name", json={"name": "Октябрь 2026"}).json()
+    assert renamed["name"] == "Октябрь 2026"
+    assert renamed["source_name"].endswith("statistics.xlsx")
+
+    labeled = client.put(
+        f"/api/batches/{batch_id}/period-label", json={"period_label": "Октябрь"}
+    ).json()
+    assert labeled["period_label"] == "Октябрь"
+    assert labeled["source_name"].endswith("statistics.xlsx")
+
+    batches = client.get("/api/batches").json()["batches"]
+    assert batches[0]["name"] == "Октябрь 2026"
+    assert batches[0]["period_label"] == "Октябрь"
+
+    too_long = client.put(f"/api/batches/{batch_id}/name", json={"name": "а" * 201})
+    assert too_long.status_code == 422
+
+    missing = client.put("/api/batches/missing/name", json={"name": "Новое"})
+    assert missing.status_code == 404
+
+    analysis = client.post(
+        "/api/analysis",
+        json={"batch_id": batch_id, "include_candidates": True, "force": True},
+    )
+    assert analysis.status_code == 200
+
+    assert client.delete(f"/api/batches/{batch_id}").json()["deleted"] == 1
+    assert client.get("/api/batches").json()["batches"] == []
+    assert client.delete("/api/batches").json()["deleted"] == 0
+
+
 def test_templates_preview_and_import(client: TestClient, tmp_path: Path) -> None:
     templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
     preview = _upload(client, templates, "/api/imports/templates/preview")

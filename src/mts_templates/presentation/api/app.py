@@ -64,6 +64,14 @@ class ExportBody(BaseModel):
     batch_id: str = Field(min_length=1)
 
 
+class BatchNameBody(BaseModel):
+    name: str | None = Field(default=None, max_length=200)
+
+
+class BatchPeriodLabelBody(BaseModel):
+    period_label: str | None = Field(default=None, max_length=100)
+
+
 class SettingsUpdate(BaseModel):
     template_fee: str | None = None
     min_support: int | None = None
@@ -141,6 +149,41 @@ def _register_routes(app: FastAPI) -> None:
     @app.get(f"{API_PREFIX}/batches")
     def list_batches(container: Container = Depends(_get_container)) -> dict[str, Any]:
         return {"batches": [batch_to_dict(item) for item in container.list_batches.execute()]}
+
+    @app.put(f"{API_PREFIX}/batches/{{batch_id}}/name")
+    def rename_batch(
+        batch_id: str,
+        payload: BatchNameBody,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, Any]:
+        batch = container.rename_batch.execute(batch_id, payload.name)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Загрузка статистики не найдена")
+        return batch_to_dict(batch)
+
+    @app.put(f"{API_PREFIX}/batches/{{batch_id}}/period-label")
+    def set_batch_period_label(
+        batch_id: str,
+        payload: BatchPeriodLabelBody,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, Any]:
+        batch = container.set_batch_period_label.execute(batch_id, payload.period_label)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="Загрузка статистики не найдена")
+        return batch_to_dict(batch)
+
+    @app.delete(f"{API_PREFIX}/batches/{{batch_id}}")
+    def delete_batch(
+        batch_id: str,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, int]:
+        if not container.delete_batch.execute(batch_id):
+            raise HTTPException(status_code=404, detail="Загрузка статистики не найдена")
+        return {"deleted": 1}
+
+    @app.delete(f"{API_PREFIX}/batches")
+    def delete_all_batches(container: Container = Depends(_get_container)) -> dict[str, int]:
+        return {"deleted": container.delete_all_batches.execute()}
 
     @app.get(f"{API_PREFIX}/dashboard")
     def dashboard(

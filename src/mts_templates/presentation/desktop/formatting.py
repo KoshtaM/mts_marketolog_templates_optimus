@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from pathlib import Path
 
+from mts_templates.application.dto import ImportBatch
 from mts_templates.domain.value_objects import Money, Operator
 
 OPERATOR_ORDER = (
@@ -67,6 +69,13 @@ def format_period(start: datetime | None, end: datetime | None) -> str:
     if start is None or end is None:
         return "—"
     return f"{format_date(start)} — {format_date(end)}"
+
+
+def format_batch_title(batch: ImportBatch) -> str:
+    """Название загрузки в списках: пользовательское имя и метка периода."""
+    name = batch.name or Path(batch.source_path).name
+    period_text = batch.period_label or format_period(batch.period_from, batch.period_to)
+    return f"{name} · {period_text} · {format_int(batch.message_count)} сообщ."
 
 
 def format_average_segments(value: float | None) -> str:

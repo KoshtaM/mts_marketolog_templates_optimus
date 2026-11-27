@@ -18,12 +18,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mts_templates.application.dto import ExportReportRequest, ImportBatch
+from mts_templates.application.dto import ExportReportRequest
 from mts_templates.application.ports import SettingsStore
 from mts_templates.application.settings import AppSettings
 from mts_templates.application.use_cases.dashboard import ListBatches
 from mts_templates.application.use_cases.export_report import ExportReport
-from mts_templates.presentation.desktop.formatting import format_int, format_period
+from mts_templates.presentation.desktop.formatting import format_batch_title, format_int
 from mts_templates.presentation.desktop.workers import CANCELLED_MESSAGE, BackgroundRunner
 
 EXCEL_FILTER = "Excel (*.xlsx)"
@@ -96,7 +96,7 @@ class ExportPage(QWidget):
         current = self._batch_combo.currentData()
         self._batch_combo.clear()
         for batch in batches:
-            self._batch_combo.addItem(_batch_title(batch), batch.id)
+            self._batch_combo.addItem(format_batch_title(batch), batch.id)
         if current is not None:
             index = self._batch_combo.findData(current)
             if index >= 0:
@@ -176,11 +176,3 @@ class ExportPage(QWidget):
             settings = self._settings
         directory = settings.last_export_dir or settings.data_dir
         return directory / f"mts-templates-{datetime.now():%Y-%m-%d-%H%M}.xlsx"
-
-
-def _batch_title(batch: ImportBatch) -> str:
-    return (
-        f"{Path(batch.source_path).name} · "
-        f"{format_period(batch.period_from, batch.period_to)} · "
-        f"{format_int(batch.message_count)} сообщ."
-    )

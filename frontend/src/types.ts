@@ -11,6 +11,8 @@ export interface ImportBatch {
   period_from: string | null
   period_to: string | null
   status: string
+  name: string | null
+  period_label: string | null
   warnings: string[]
   segment_count: number
   duplicate_message_ids: number

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
 from mts_templates.application.dto import (
     AnalysisView,
     AnalyzeRequest,
-    ImportBatch,
     MatchedMessageView,
     OperatorTriggerView,
     TemplateMetricsView,
@@ -47,6 +45,7 @@ from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import (
     MatchedMessagesDialog,
 )
 from mts_templates.presentation.desktop.formatting import (
+    format_batch_title,
     format_int,
     format_money,
     format_operators,
@@ -347,7 +346,7 @@ class TemplatesPage(QWidget):
         self._batch_combo.blockSignals(True)
         self._batch_combo.clear()
         for batch in batches:
-            self._batch_combo.addItem(_batch_title(batch), batch.id)
+            self._batch_combo.addItem(format_batch_title(batch), batch.id)
         if current is not None:
             index = self._batch_combo.findData(current)
             if index >= 0:
@@ -601,12 +600,4 @@ def _template_series(metric: TemplateMetricsView | None) -> DashboardSeries | No
             DashboardTile(format_money(benefit), tone),
             DashboardTile(format_percent(metric.trigger_rate)),
         ),
-    )
-
-
-def _batch_title(batch: ImportBatch) -> str:
-    return (
-        f"{Path(batch.source_path).name} · "
-        f"{format_period(batch.period_from, batch.period_to)} · "
-        f"{format_int(batch.message_count)} сообщ."
     )

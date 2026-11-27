@@ -20,6 +20,12 @@ from mts_templates.application.use_cases.import_templates import (
 )
 from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
 from mts_templates.application.use_cases.list_templates import ListTemplates
+from mts_templates.application.use_cases.manage_batches import (
+    DeleteAllBatches,
+    DeleteBatch,
+    RenameBatch,
+    SetBatchPeriodLabel,
+)
 from mts_templates.domain.tariffs.models import TariffCatalog
 from mts_templates.infrastructure.config import TomlSettingsStore, load_settings
 from mts_templates.infrastructure.excel.report_writer import ExcelReportWriter
@@ -58,6 +64,10 @@ class Container:
     matched_messages: ListMatchedMessages
     list_templates: ListTemplates
     list_batches: ListBatches
+    rename_batch: RenameBatch
+    set_batch_period_label: SetBatchPeriodLabel
+    delete_batch: DeleteBatch
+    delete_all_batches: DeleteAllBatches
     dashboard: GetDashboardSummary
     export_report: ExportReport
     config_provider: Callable[[], AnalysisConfig]
@@ -129,6 +139,10 @@ def build_container(
         matched_messages=ListMatchedMessages(messages, templates, config_provider),
         list_templates=ListTemplates(templates),
         list_batches=ListBatches(imports),
+        rename_batch=RenameBatch(imports),
+        set_batch_period_label=SetBatchPeriodLabel(imports),
+        delete_batch=DeleteBatch(imports),
+        delete_all_batches=DeleteAllBatches(imports),
         dashboard=GetDashboardSummary(imports, messages, templates, analysis),
         export_report=ExportReport(
             imports=imports,

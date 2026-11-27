@@ -33,6 +33,8 @@ class ImportBatch:
     period_from: datetime | None
     period_to: datetime | None
     status: str
+    name: str | None = None
+    period_label: str | None = None
     warnings: tuple[str, ...] = ()
     segment_count: int = 0
     duplicate_message_ids: int = 0

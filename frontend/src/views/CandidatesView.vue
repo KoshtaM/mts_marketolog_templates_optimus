@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import BusyOverlay from '../components/BusyOverlay.vue'
 import MatchedMessagesDialog from '../components/MatchedMessagesDialog.vue'
 import SegmentChart from '../components/SegmentChart.vue'
-import { date, integer, money, period, share } from '../format'
+import { batchName, batchPeriod, date, integer, money, period, share } from '../format'
 import { analyze, benefitClass, isBusy, selectBatch, state } from '../store'
 import type { Candidate, DaySegments } from '../types'
 
@@ -123,7 +123,7 @@ onMounted(() => {
         <select class="select" style="width: auto; max-width: 320px" :value="state.batchId" @change="onBatch">
           <option v-if="!state.batches.length" value="">Нет загрузок</option>
           <option v-for="batch in state.batches" :key="batch.id" :value="batch.id">
-            {{ batch.source_name }} · {{ date(batch.period_from) }}
+            {{ batchName(batch) }} · {{ batchPeriod(batch) }}
           </option>
         </select>
         <input v-model="filter" class="input" style="width: 220px" placeholder="Поиск по тексту, отправителю…" />

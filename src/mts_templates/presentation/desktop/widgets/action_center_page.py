@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QColor
@@ -23,7 +22,6 @@ from PySide6.QtWidgets import (
 from mts_templates.application.dto import (
     ActionCenterView,
     ActionItemView,
-    ImportBatch,
     MatchedMessageView,
 )
 from mts_templates.application.use_cases.dashboard import ListBatches
@@ -32,6 +30,7 @@ from mts_templates.application.use_cases.list_matched_messages import ListMatche
 from mts_templates.presentation.desktop.benefit_style import RowPalette, row_palette, semantic_text
 from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import MatchedMessagesDialog
 from mts_templates.presentation.desktop.formatting import (
+    format_batch_title,
     format_int,
     format_money,
     format_period,
@@ -98,14 +97,6 @@ def _theme_row_palette() -> RowPalette:
     """Фоны подсветки строк под активную тему."""
     palette = active_palette()
     return row_palette(palette.surface, palette.positive, palette.negative)
-
-
-def _batch_title(batch: ImportBatch) -> str:
-    return (
-        f"{Path(batch.source_path).name} · "
-        f"{format_period(batch.period_from, batch.period_to)} · "
-        f"{format_int(batch.message_count)} сообщ."
-    )
 
 
 class ActionCenterPage(QWidget):
@@ -210,7 +201,7 @@ class ActionCenterPage(QWidget):
         self._batch_combo.blockSignals(True)
         self._batch_combo.clear()
         for batch in batches:
-            self._batch_combo.addItem(_batch_title(batch), batch.id)
+            self._batch_combo.addItem(format_batch_title(batch), batch.id)
         if current is not None:
             index = self._batch_combo.findData(current)
             if index >= 0:

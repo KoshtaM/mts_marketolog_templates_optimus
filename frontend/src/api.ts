@@ -77,6 +77,25 @@ export const api = {
 
   batches: () => request<{ batches: ImportBatch[] }>('/batches'),
 
+  renameBatch: (batchId: string, name: string | null) =>
+    request<ImportBatch>(`/batches/${encodeURIComponent(batchId)}/name`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+
+  setBatchPeriodLabel: (batchId: string, periodLabel: string | null) =>
+    request<ImportBatch>(`/batches/${encodeURIComponent(batchId)}/period-label`, {
+      method: 'PUT',
+      body: JSON.stringify({ period_label: periodLabel }),
+    }),
+
+  deleteBatch: (batchId: string) =>
+    request<{ deleted: number }>(`/batches/${encodeURIComponent(batchId)}`, {
+      method: 'DELETE',
+    }),
+
+  deleteAllBatches: () => request<{ deleted: number }>('/batches', { method: 'DELETE' }),
+
   dashboard: (batchId?: string) =>
     request<DashboardSummary>(
       `/dashboard${batchId ? `?batch_id=${encodeURIComponent(batchId)}` : ''}`,

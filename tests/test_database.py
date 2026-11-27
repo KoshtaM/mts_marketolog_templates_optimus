@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 
+from mts_templates.application.dto import ImportBatch, StoredStatistics
+from mts_templates.domain.value_objects import Money
 from mts_templates.infrastructure.persistence.sqlite.database import Database
+from mts_templates.infrastructure.persistence.sqlite.repositories import SqliteImportRepository
 
 EXPECTED_TABLES = {
     "schema_migrations",
@@ -29,7 +33,7 @@ def test_migrate_creates_schema(tmp_path: Path) -> None:
     assert tables >= EXPECTED_TABLES
 
     versions = [row["version"] for row in db.fetchall("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     db.close()
 
@@ -40,7 +44,7 @@ def test_migrate_is_idempotent(tmp_path: Path) -> None:
     db.migrate()
 
     versions = [row["version"] for row in db.fetchall("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     db.close()
 
@@ -158,5 +162,43 @@ def test_foreign_keys_cascade(tmp_path: Path) -> None:
     db.connection.commit()
 
     assert db.fetchone("SELECT COUNT(*) AS count FROM messages")["count"] == 0
+
+    db.close()
+
+
+def test_batch_management_crud_and_delete(tmp_path: Path) -> None:
+    db = Database(tmp_path / "test.db")
+    db.migrate()
+    repository = SqliteImportRepository(db)
+    batch = ImportBatch(
+        id="batch-1",
+        source_path="test.xlsx",
+        source_sha256="hash",
+        kind="statistics",
+        imported_at=datetime(2026, 11, 1, 12, 0, 0, tzinfo=UTC),
+        row_count=1,
+        message_count=1,
+        total_cost=Money.from_rub("10"),
+        period_from=None,
+        period_to=None,
+        status="ok",
+    )
+    repository.save(StoredStatistics(batch=batch, messages=()))
+
+    renamed = repository.rename("batch-1", "Октябрь 2026")
+    assert renamed is not None
+    assert renamed.name == "Октябрь 2026"
+    assert renamed.period_label is None
+
+    labeled = repository.set_period_label("batch-1", "Октябрь")
+    assert labeled is not None
+    assert labeled.period_label == "Октябрь"
+
+    assert repository.rename("missing", "Новое") is None
+    assert repository.set_period_label("missing", "Ноябрь") is None
+    assert repository.delete("missing") is False
+
+    assert repository.delete("batch-1") is True
+    assert repository.delete_all() == 0
 
     db.close()

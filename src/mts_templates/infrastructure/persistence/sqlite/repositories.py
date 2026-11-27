@@ -45,6 +45,56 @@ class SqliteImportRepository:
         rows = self._database.fetchall("SELECT * FROM import_batches ORDER BY imported_at DESC, id")
         return tuple(_row_to_batch(row) for row in rows)
 
+    def rename(self, batch_id: str, name: str | None) -> ImportBatch | None:
+        return self._update_optional_text(batch_id, "name", name)
+
+    def set_period_label(self, batch_id: str, period_label: str | None) -> ImportBatch | None:
+        return self._update_optional_text(batch_id, "period_label", period_label)
+
+    def delete(self, batch_id: str) -> bool:
+        """Удалить загрузку; сообщения и прогоны анализа уходят каскадом."""
+        connection = self._database.connect()
+        try:
+            with connection:
+                cursor = connection.execute(
+                    "DELETE FROM import_batches WHERE id = ?",
+                    (batch_id,),
+                )
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Не удалось удалить загрузку: {exc}") from exc
+        return cursor.rowcount > 0
+
+    def delete_all(self) -> int:
+        """Удалить все загрузки; шаблоны и настройки остаются."""
+        connection = self._database.connect()
+        try:
+            with connection:
+                cursor = connection.execute("DELETE FROM import_batches")
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Не удалось удалить загрузки: {exc}") from exc
+        return cursor.rowcount
+
+    def _update_optional_text(
+        self,
+        batch_id: str,
+        column: str,
+        value: str | None,
+    ) -> ImportBatch | None:
+        if column not in {"name", "period_label"}:
+            raise ValueError(f"Неизвестное поле загрузки: {column}")
+        connection = self._database.connect()
+        try:
+            with connection:
+                cursor = connection.execute(
+                    f"UPDATE import_batches SET {column} = ? WHERE id = ?",
+                    (value, batch_id),
+                )
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Не удалось изменить загрузку: {exc}") from exc
+        if cursor.rowcount == 0:
+            return None
+        return self.get(batch_id)
+
     def save(self, stored: StoredStatistics) -> None:
         batch = stored.batch
         connection = self._database.connect()
@@ -158,6 +208,8 @@ def _row_to_batch(row: sqlite3.Row) -> ImportBatch:
         period_from=_optional_datetime(row["period_from"]),
         period_to=_optional_datetime(row["period_to"]),
         status=str(row["status"]),
+        name=_optional_text(row["name"]),
+        period_label=_optional_text(row["period_label"]),
         warnings=tuple(str(item) for item in warnings),
         segment_count=int(row["segment_count"] or 0),
         duplicate_message_ids=int(row["duplicate_message_ids"] or 0),
@@ -173,3 +225,9 @@ def _optional_datetime(value: object) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(str(value))
+
+
+def _optional_text(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    return str(value)

@@ -45,6 +45,7 @@ from mts_templates.presentation.desktop.daily_chart import build_daily_chart
 from mts_templates.presentation.desktop.distribution import group_buckets
 from mts_templates.presentation.desktop.formatting import (
     format_average,
+    format_batch_title,
     format_int,
     format_money,
     format_operators,
@@ -924,7 +925,7 @@ class DashboardPage(QWidget):
         self._batch_combo.blockSignals(True)
         self._batch_combo.clear()
         for batch in batches:
-            self._batch_combo.addItem(_batch_title(batch), batch.id)
+            self._batch_combo.addItem(format_batch_title(batch), batch.id)
         if current is not None:
             index = self._batch_combo.findData(current)
             if index >= 0:
@@ -1437,8 +1438,8 @@ def _column_alignment(column: int) -> Qt.AlignmentFlag:
 def _subtitle(batch: ImportBatch) -> str:
     """Файл, период и ошибки импорта одной строкой под заголовком."""
     parts = [
-        Path(batch.source_path).name,
-        format_period(batch.period_from, batch.period_to),
+        batch.name or Path(batch.source_path).name,
+        batch.period_label or format_period(batch.period_from, batch.period_to),
         f"импортирован {batch.imported_at.strftime('%d.%m.%Y %H:%M')}",
     ]
     if batch.send_error_rows or batch.delivery_error_rows:
@@ -1447,11 +1448,3 @@ def _subtitle(batch: ImportBatch) -> str:
             f"доставки {format_int(batch.delivery_error_rows)}"
         )
     return " · ".join(parts)
-
-
-def _batch_title(batch: ImportBatch) -> str:
-    return (
-        f"{Path(batch.source_path).name} · "
-        f"{format_period(batch.period_from, batch.period_to)} · "
-        f"{format_int(batch.message_count)} сообщ."
-    )
