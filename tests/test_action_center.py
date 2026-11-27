@@ -140,6 +140,9 @@ def test_loss_template_is_paid_back_by_disabling() -> None:
     assert item.template_id == "t1"
     assert item.drill_down is DrillDown.TEMPLATE
     assert item.monthly_benefit == Money.zero()
+    # Убыток 1400 ₽ меньше 75 % платы (1500 ₽): шаблон наблюдаем, но не удаляем.
+    assert item.action is Action.WATCH
+    assert "Наблюдать" in item.recommendation
     assert center.total_monthly_loss.rounded().amount == Decimal("1400.00")
     assert center.total_monthly_benefit == Money.zero()
 
@@ -212,6 +215,7 @@ def test_loss_above_quarter_of_fee_is_included() -> None:
 
     assert [item.kind for item in center.items] == [ActionKind.LOSS_TEMPLATE]
     assert center.items[0].monthly_loss.rounded().amount == Decimal("600.00")
+    assert center.items[0].action is Action.WATCH
     assert center.loss_templates == 1
 
 
@@ -306,7 +310,8 @@ def test_loss_template_action_requires_three_quarters_of_fee() -> None:
     below_center = build_action_center(_run(metrics=(below,)), (_template(),))
     above_center = build_action_center(_run(metrics=(above,)), (_template(),))
 
-    assert below_center.items[0].action is None
+    assert below_center.items[0].action is Action.WATCH
+    assert "Наблюдать" in below_center.items[0].recommendation
     assert below_center.items[0].monthly_benefit == Money.zero()
     assert above_center.items[0].action is Action.DELETE
     assert above_center.items[0].monthly_benefit == Money.zero()

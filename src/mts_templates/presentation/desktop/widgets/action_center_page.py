@@ -64,7 +64,7 @@ def _severity_title(severity: int) -> str:
 
 def _action_title(action: str) -> str:
     """Русская подпись рекомендуемого действия."""
-    return {"delete": "Удалить", "add": "Добавить"}.get(action, "—")
+    return {"delete": "Удалить", "add": "Добавить", "watch": "Наблюдать"}.get(action, "—")
 
 
 def _money_or_dash(value: Money) -> str:

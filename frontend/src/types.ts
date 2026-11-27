@@ -296,7 +296,7 @@ export interface MatchedMessage {
 
 export type ActionKind = 'loss_template' | 'unworking_template' | 'profitable_candidate'
 
-export type Action = 'delete' | 'add'
+export type Action = 'delete' | 'add' | 'watch'
 
 export type ActionDrillDown = 'template'
 

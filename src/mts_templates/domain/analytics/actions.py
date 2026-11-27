@@ -43,10 +43,11 @@ ACTION_FEE_SHARE = Decimal("0.75")
 
 
 class Action(StrEnum):
-    """Рекомендуемое действие: удалить шаблон или добавить кандидат."""
+    """Рекомендуемое действие: удалить шаблон, добавить кандидат или наблюдать."""
 
     DELETE = "delete"
     ADD = "add"
+    WATCH = "watch"
 
 
 class ActionKind(StrEnum):
@@ -191,14 +192,14 @@ def _template_items(
                 recommendation=(
                     "Удалить шаблон: ежемесячная плата почти не окупается экономией на сегментах."
                     if delete
-                    else "Отключить шаблон или пересмотреть его необходимость: "
-                    "ежемесячная плата выше экономии на сегментах."
+                    else "Наблюдать за шаблоном: ежемесячная плата выше экономии на "
+                    "сегментах, но убыток ещё не требует удаления."
                 ),
                 monthly_loss=loss,
                 messages=item.matched_messages,
                 segments=item.matched_segments,
                 drill_down=DrillDown.TEMPLATE,
-                action=Action.DELETE if delete else None,
+                action=Action.DELETE if delete else Action.WATCH,
                 monthly_benefit=Money.zero(),
             )
         )

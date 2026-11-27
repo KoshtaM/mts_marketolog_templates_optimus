@@ -33,6 +33,7 @@ const kindLabels: Record<ActionKind, string> = {
 const actionLabels: Record<Action, string> = {
   delete: 'Удалить',
   add: 'Добавить',
+  watch: 'Наблюдать',
 }
 
 const counts = computed<Record<ActionKind, number>>(() => {
@@ -504,6 +505,12 @@ watch(
   color: var(--positive);
   border-color: color-mix(in srgb, var(--positive) 30%, var(--border));
   background: color-mix(in srgb, var(--positive) 10%, var(--surface));
+}
+
+.action-badge.act-watch {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+  background: color-mix(in srgb, var(--warning) 10%, var(--surface));
 }
 
 @media (max-width: 1100px) {
