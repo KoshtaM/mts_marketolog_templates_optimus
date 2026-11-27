@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
             analyze_templates=container.analyze_templates,
             matched_messages=container.matched_messages,
             list_batches=container.list_batches,
+            template_trend=container.template_trend,
             settings_provider=container.settings_store.load,
             runner=self._runner,
         )

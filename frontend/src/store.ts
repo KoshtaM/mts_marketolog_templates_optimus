@@ -7,7 +7,10 @@ import type {
   AppSettings,
   DashboardSummary,
   ImportBatch,
+  ImportReport,
+  MatchedMessage,
   SmsTemplate,
+  TemplateTrend,
   Theme,
 } from './types'
 
@@ -29,6 +32,8 @@ interface State {
   actionCenter: ActionCenter | null
   actionCenterBatchId: string
   templates: SmsTemplate[]
+  trend: TemplateTrend | null
+  trendTemplateId: string
 }
 
 export const state = reactive<State>({
@@ -46,6 +51,8 @@ export const state = reactive<State>({
   actionCenter: null,
   actionCenterBatchId: '',
   templates: [],
+  trend: null,
+  trendTemplateId: '',
 })
 
 export const isBusy = computed(() => state.busyCount > 0)
@@ -179,6 +186,16 @@ export async function selectBatch(batchId: string): Promise<void> {
   state.actionCenter = null
   state.actionCenterBatchId = ''
   await loadDashboard(batchId)
+}
+
+export async function loadTemplateTrend(templateId: string): Promise<void> {
+  if (!state.batchId) return
+  try {
+    state.trendTemplateId = templateId
+    state.trend = await api.templateTrend(templateId)
+  } catch (error) {
+    reportError(error)
+  }
 }
 
 export async function renameBatch(batchId: string, name: string | null): Promise<void> {

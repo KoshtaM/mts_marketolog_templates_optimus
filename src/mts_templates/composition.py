@@ -13,6 +13,7 @@ from mts_templates.application.use_cases.dashboard import GetDashboardSummary, L
 from mts_templates.application.use_cases.export_report import ExportReport
 from mts_templates.application.use_cases.find_candidates import FindCandidates
 from mts_templates.application.use_cases.get_action_center import GetActionCenter
+from mts_templates.application.use_cases.get_template_trend import GetTemplateTrend
 from mts_templates.application.use_cases.import_statistics import ImportStatistics
 from mts_templates.application.use_cases.import_templates import (
     ImportTemplates,
@@ -64,6 +65,7 @@ class Container:
     matched_messages: ListMatchedMessages
     list_templates: ListTemplates
     list_batches: ListBatches
+    template_trend: GetTemplateTrend
     rename_batch: RenameBatch
     set_batch_period_label: SetBatchPeriodLabel
     delete_batch: DeleteBatch
@@ -139,6 +141,7 @@ def build_container(
         matched_messages=ListMatchedMessages(messages, templates, config_provider),
         list_templates=ListTemplates(templates),
         list_batches=ListBatches(imports),
+        template_trend=GetTemplateTrend(analysis),
         rename_batch=RenameBatch(imports),
         set_batch_period_label=SetBatchPeriodLabel(imports),
         delete_batch=DeleteBatch(imports),

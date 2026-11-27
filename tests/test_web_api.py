@@ -121,6 +121,24 @@ def test_batch_management_endpoints(client: TestClient, tmp_path: Path) -> None:
     assert client.delete("/api/batches").json()["deleted"] == 0
 
 
+def test_template_trend_endpoint(client: TestClient, tmp_path: Path) -> None:
+    batch_id = _prepare_batch(client, tmp_path)
+    _import_templates(client, tmp_path)
+    analysis = client.post(
+        "/api/analysis",
+        json={"batch_id": batch_id, "include_candidates": True, "force": True},
+    )
+    assert analysis.status_code == 200
+    template_id = analysis.json()["metrics"][0]["template_id"]
+
+    trend = client.get(f"/api/templates/{template_id}/trend").json()
+
+    assert trend["template_id"] == template_id
+    assert len(trend["points"]) == 1
+    assert trend["points"][0]["batch_id"] == batch_id
+    assert trend["deterioration"] is None
+
+
 def test_templates_preview_and_import(client: TestClient, tmp_path: Path) -> None:
     templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
     preview = _upload(client, templates, "/api/imports/templates/preview")

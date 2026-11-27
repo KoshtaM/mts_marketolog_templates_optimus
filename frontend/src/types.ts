@@ -236,6 +236,30 @@ export interface OperatorTrigger {
   trigger_rate: number
 }
 
+export interface TemplateTrendPoint {
+  batch_id: string
+  period_from: string | null
+  period_to: string | null
+  segments: number
+  triggered_messages: number
+  trigger_rate: string
+  net_benefit: string
+}
+
+export interface Deterioration {
+  template_id: string
+  previous_triggered_messages: number
+  current_triggered_messages: number
+  previous_trigger_rate: string
+  current_trigger_rate: string
+}
+
+export interface TemplateTrend {
+  template_id: string
+  points: TemplateTrendPoint[]
+  deterioration: Deterioration | null
+}
+
 export interface Analysis {
   run_id: string
   batch_id: string

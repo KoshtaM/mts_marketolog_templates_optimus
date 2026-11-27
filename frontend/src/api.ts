@@ -9,6 +9,7 @@ import type {
   SmsTemplate,
   TemplateFilePreview,
   TemplateImportReport,
+  TemplateTrend,
   Theme,
 } from './types'
 
@@ -110,6 +111,9 @@ export const api = {
         force,
       }),
     }),
+
+  templateTrend: (templateId: string) =>
+    request<TemplateTrend>(`/templates/${encodeURIComponent(templateId)}/trend`),
 
   templates: () => request<{ templates: SmsTemplate[] }>('/templates'),
 

@@ -45,6 +45,7 @@ from mts_templates.presentation.api.serializers import (
     template_import_report_to_dict,
     template_preview_to_dict,
     template_to_dict,
+    template_trend_to_dict,
     theme_to_dict,
 )
 from mts_templates.presentation.desktop.theme_catalog import SYSTEM_THEME, THEMES
@@ -197,6 +198,14 @@ def _register_routes(app: FastAPI) -> None:
         return {
             "templates": [template_to_dict(item) for item in container.list_templates.execute()]
         }
+
+    @app.get(f"{API_PREFIX}/templates/{{template_id}}/trend")
+    def template_trend(
+        template_id: str,
+        container: Container = Depends(_get_container),
+    ) -> dict[str, Any]:
+        trend = container.template_trend.execute(template_id)
+        return template_trend_to_dict(trend)
 
     @app.post(f"{API_PREFIX}/imports/statistics")
     def import_statistics(

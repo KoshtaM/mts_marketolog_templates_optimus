@@ -100,6 +100,9 @@ class AnalysisRepository(Protocol):
 
     def latest(self, batch_id: str) -> AnalysisRun | None: ...
 
+    def list_runs(self) -> tuple[AnalysisRun, ...]:
+        """Все сохранённые прогоны по убыванию времени создания."""
+
     def save(self, run: AnalysisRun) -> None: ...
 
     def invalidate_all(self) -> None:

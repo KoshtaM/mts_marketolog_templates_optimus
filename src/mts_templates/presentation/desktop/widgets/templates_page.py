@@ -33,7 +33,9 @@ from mts_templates.application.use_cases.dashboard import (
     negative_benefit,
     positive_benefit,
 )
+from mts_templates.application.use_cases.get_template_trend import GetTemplateTrend
 from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
+from mts_templates.domain.analytics.trend import Deterioration, TemplateTrend, detect_deterioration
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.benefit_style import (
     RowPalette,
@@ -194,6 +196,7 @@ class TemplatesPage(QWidget):
         analyze_templates: AnalyzeTemplates,
         matched_messages: ListMatchedMessages,
         list_batches: ListBatches,
+        template_trend: GetTemplateTrend,
         settings_provider: Callable[[], AppSettings],
         runner: BackgroundRunner,
         parent: QWidget | None = None,
@@ -202,6 +205,7 @@ class TemplatesPage(QWidget):
         self._analyze_templates = analyze_templates
         self._matched_messages = matched_messages
         self._list_batches = list_batches
+        self._template_trend = template_trend
         self._settings_provider = settings_provider
         self._thresholds: BenefitThresholds = settings_provider().benefit_thresholds
         self._runner = runner
@@ -209,6 +213,10 @@ class TemplatesPage(QWidget):
         self._messages_dialog: MatchedMessagesDialog | None = None
         self._operator_triggers: tuple[OperatorTriggerView, ...] = ()
         self._row_palette = _theme_row_palette()
+        self._trend: TemplateTrend | None = None
+        self._deterioration: Deterioration | None = None
+        self._trend_view = QPlainTextEdit(self)
+        self._trend_view.setReadOnly(True)
 
         self._batch_combo = QComboBox(self)
         self._analyze_button = QPushButton("Выполнить анализ", self)
@@ -317,6 +325,7 @@ class TemplatesPage(QWidget):
             totals.addWidget(total)
         layout.addLayout(totals)
 
+        layout.addWidget(self._trend_view)
         self._summary.setWordWrap(True)
         self._summary.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self._summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -324,6 +333,48 @@ class TemplatesPage(QWidget):
         layout.addWidget(self._summary)
         layout.addWidget(self._warnings, stretch=1)
         return panel
+
+    def _selected_template_id(self) -> str | None:
+        """Выделенный в таблице шаблон, иначе первый в отфильтрованном наборе."""
+        current = self._table.currentIndex()
+        if current.isValid():
+            source = self._proxy.mapToSource(current)
+            if source.isValid():
+                return str(self._model.row_at(source.row()).template_id)
+        rows = self._model.rows()
+        return rows[0].template_id if rows else None
+
+    def _update_trend(self) -> None:
+        """История шаблона по загрузкам и алерт о деградации срабатываний."""
+        trend: TemplateTrend | None = None
+        deterioration: Deterioration | None = None
+        template_id = self._selected_template_id()
+        if template_id is not None:
+            try:
+                trend = self._template_trend.execute(template_id)
+                deterioration = detect_deterioration(trend)
+            except Exception:
+                trend = None
+        self._trend = trend
+        self._deterioration = deterioration
+        if trend is None or not trend.points:
+            self._trend_view.setPlainText("История шаблонов по загрузкам пока не построена.")
+            return
+        lines = [f"История по загрузкам ({len(trend.points)}):"]
+        for point in trend.points:
+            lines.append(
+                f"{format_period(point.period.start, point.period.end)}: "
+                f"сегментов {format_int(point.segments)}, "
+                f"срабатываний {format_int(point.triggered_messages)}, "
+                f"выгода {format_money(point.net_benefit)}/мес"
+            )
+        if deterioration is not None:
+            lines.append(
+                "АЛЕРТ: шаблон перестал срабатывать — в предыдущей загрузке было "
+                f"{deterioration.previous_triggered_messages} срабатываний, сейчас "
+                f"{deterioration.current_triggered_messages}."
+            )
+        self._trend_view.setPlainText("\n".join(lines))
 
     def _fit_operator_width(self) -> None:
         """Отдать таблице операторов её колонки, оставив остальное отчёту справа."""
@@ -449,6 +500,7 @@ class TemplatesPage(QWidget):
         if not lines:
             lines.append("Предупреждений нет.")
         self._warnings.setPlainText("\n".join(f"• {line}" for line in lines))
+        self._update_trend()
         self._select_first_row()
         self.analysis_completed.emit()
 

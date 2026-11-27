@@ -3,15 +3,19 @@ import { computed, onMounted, ref, watch } from 'vue'
 import BusyOverlay from '../components/BusyOverlay.vue'
 import MatchedMessagesDialog from '../components/MatchedMessagesDialog.vue'
 import SegmentChart from '../components/SegmentChart.vue'
+import TrendChart from '../components/TrendChart.vue'
 import { batchName, batchPeriod, date, integer, money, moneyValue, period, share } from '../format'
 import {
   analyze,
   benefitClass,
   isBusy,
+  loadDashboard,
+  loadTemplateTrend,
+  reportError,
   selectBatch,
   state,
 } from '../store'
-import type { DaySegments, TemplateMetrics } from '../types'
+import type { DaySegments, TemplateMetrics, TemplateTrend } from '../types'
 
 const selectedId = ref('')
 const filter = ref('')
@@ -166,6 +170,17 @@ watch(
     }
   },
   { immediate: true },
+)
+
+const trend = computed<TemplateTrend | null>(() => state.trend)
+const deterioration = computed(() => state.trend?.deterioration ?? null)
+const trendMetric = ref<'segments' | 'trigger_rate' | 'net_benefit'>('trigger_rate')
+
+watch(
+  () => selectedId.value,
+  (templateId) => {
+    if (templateId) void loadTemplateTrend(templateId)
+  },
 )
 
 onMounted(() => {
@@ -347,6 +362,37 @@ onMounted(() => {
         </section>
       </div>
 
+      <section class="card trend-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">История шаблона</div>
+            <div class="card-caption">
+              Тренд по загрузкам · {{ selected ? selected.name || selected.template_id : 'выберите шаблон в таблице' }}
+            </div>
+          </div>
+          <div class="trend-metrics">
+            <button class="btn" type="button" :class="{ active: trendMetric === 'trigger_rate' }" @click="trendMetric = 'trigger_rate'">
+              Срабатывание
+            </button>
+            <button class="btn" type="button" :class="{ active: trendMetric === 'segments' }" @click="trendMetric = 'segments'">
+              Сегменты
+            </button>
+            <button class="btn" type="button" :class="{ active: trendMetric === 'net_benefit' }" @click="trendMetric = 'net_benefit'">
+              Выгода
+            </button>
+          </div>
+        </div>
+        <div v-if="selected && trend && trend.points.length" class="chart-fit">
+          <TrendChart :points="trend.points" :metric="trendMetric" />
+        </div>
+        <p v-else class="card-caption">Нет сохранённых прогонов для тренда по загрузкам</p>
+        <p v-if="deterioration" class="trend-alert">
+          ▸ Алерт: шаблон «{{ selected?.text }}» перестал срабатывать — в предыдущей загрузке было
+          {{ deterioration.previous_triggered_messages }} срабатываний, сейчас их {{ deterioration.current_triggered_messages }}.
+          Возможно, изменился оператор, текст или отправитель.
+        </p>
+      </section>
+
       <section class="card benefit-strip">
         <div class="benefit-stats">
           <div class="benefit-stat">
@@ -459,6 +505,28 @@ onMounted(() => {
   margin: 0;
   padding-top: calc(var(--space) * 1.25);
   border-top: var(--border-width) solid var(--border);
+}
+
+.trend-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.25);
+}
+
+.trend-metrics {
+  display: flex;
+  gap: calc(var(--space) * 1.5);
+}
+
+.trend-alert {
+  margin: 0;
+  padding: calc(var(--space) * 1.25) calc(var(--space) * 2);
+  border: var(--border-width) solid color-mix(in srgb, var(--negative) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--negative) 8%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 @media (max-width: 1180px) {

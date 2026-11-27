@@ -38,6 +38,11 @@ class SqliteAnalysisRepository:
         )
         return None if row is None else self._load(row)
 
+    def list_runs(self) -> tuple[AnalysisRun, ...]:
+        """Все сохранённые прогоны, чтобы строить тренды по загрузкам."""
+        rows = self._database.fetchall("SELECT * FROM analysis_runs ORDER BY created_at")
+        return tuple(self._load(row) for row in rows)
+
     def invalidate_all(self) -> None:
         """Удалить все прогоны: метрики зависят от набора шаблонов."""
         connection = self._database.connect()

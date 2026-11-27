@@ -31,6 +31,11 @@ from mts_templates.application.dto import (
 from mts_templates.application.settings import AppSettings
 from mts_templates.domain.analytics.activity import DaySegments
 from mts_templates.domain.analytics.import_aggregation import QualityIssue
+from mts_templates.domain.analytics.trend import (
+    Deterioration,
+    TemplateTrend,
+    detect_deterioration,
+)
 from mts_templates.domain.entities import SmsTemplate
 from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.theme_catalog import Theme
@@ -278,6 +283,38 @@ def action_item_to_dict(item: ActionItemView) -> dict[str, Any]:
         "messages": item.messages,
         "segments": item.segments,
         "drill_down": item.drill_down,
+    }
+
+
+def deterioration_to_dict(item: Deterioration | None) -> dict[str, Any] | None:
+    if item is None:
+        return None
+    return {
+        "template_id": item.template_id,
+        "previous_triggered_messages": item.previous_triggered_messages,
+        "current_triggered_messages": item.current_triggered_messages,
+        "previous_trigger_rate": str(item.previous_trigger_rate),
+        "current_trigger_rate": str(item.current_trigger_rate),
+    }
+
+
+def template_trend_to_dict(trend: TemplateTrend) -> dict[str, Any]:
+    deterioration = detect_deterioration(trend)
+    return {
+        "template_id": trend.template_id,
+        "points": [
+            {
+                "batch_id": point.batch_id,
+                "period_from": moment(point.period.start),
+                "period_to": moment(point.period.end),
+                "segments": point.segments,
+                "triggered_messages": point.triggered_messages,
+                "trigger_rate": str(point.trigger_rate),
+                "net_benefit": str(point.net_benefit),
+            }
+            for point in trend.points
+        ],
+        "deterioration": deterioration_to_dict(deterioration),
     }
 
 
