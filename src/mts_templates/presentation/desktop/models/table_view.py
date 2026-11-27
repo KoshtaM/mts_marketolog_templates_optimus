@@ -22,11 +22,13 @@ MIN_STRETCH_WIDTH = 140
 
 
 class RowsTableView(QTableView):
-    """Таблица, которая растягивает одну колонку и подгоняет остальные.
+    """Таблица с подгонкой ширин под содержимое и ширину окна.
 
     Ширины колонок берутся из содержимого. Свободное место забирает
-    `stretch_column`; при нехватке места она сжимается до `MIN_STRETCH_WIDTH`,
-    после чего появляется горизонтальная прокрутка.
+    `stretch_column`; при нехватке места она сжимается до `MIN_STRETCH_WIDTH`.
+    В режиме `fit_to_viewport` все колонки пропорционально сжимаются до
+    ширины видимой области — горизонтальной прокрутки нет, а длинный текст
+    доступен в подсказке ячейки.
     """
 
     def __init__(
@@ -34,11 +36,13 @@ class RowsTableView(QTableView):
         *,
         stretch_column: int | None = None,
         min_stretch_width: int = MIN_STRETCH_WIDTH,
+        fit_to_viewport: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._stretch_column = stretch_column
+        self._stretch_column = None if fit_to_viewport else stretch_column
         self._min_stretch_width = min_stretch_width
+        self._fit_to_viewport = fit_to_viewport
         self._content_widths: list[int] = []
         self._applying = False
         self.horizontalHeader().sectionResized.connect(self._remember_width)
@@ -71,14 +75,40 @@ class RowsTableView(QTableView):
         self._content_widths[index] = new
         self._apply_widths()
 
+    def _shrink_to_viewport(self, widths: list[int], available: int) -> list[int]:
+        """Пропорционально ужать колонки, сохраняя минимальную ширину."""
+        if available <= 0 or sum(widths) <= available:
+            return widths
+
+        excess = sum(widths) - available
+        reducible = sum(width - MIN_COLUMN_WIDTH for width in widths if width > MIN_COLUMN_WIDTH)
+        if reducible > 0:
+            take = min(excess, reducible)
+            widths = [
+                width - round((width - MIN_COLUMN_WIDTH) * take / reducible) for width in widths
+            ]
+
+        # Если даже минимальных ширин не хватает, делим место поровну.
+        total = sum(widths)
+        if total > available:
+            ratio = available / total
+            widths = [max(24, int(width * ratio)) for width in widths]
+        while sum(widths) > available and max(widths) > 24:
+            largest = max(range(len(widths)), key=widths.__getitem__)
+            widths[largest] -= 1
+        return widths
+
     def _apply_widths(self) -> None:
         if not self._content_widths:
             return
 
         widths = list(self._content_widths)
-        if self._stretch_column is not None:
+        available = self.viewport().width()
+        if self._fit_to_viewport:
+            widths = self._shrink_to_viewport(widths, available)
+        elif self._stretch_column is not None:
             index = self._stretch_column
-            extra = self.viewport().width() - sum(widths)
+            extra = available - sum(widths)
             if extra >= 0:
                 widths[index] += extra
             else:
@@ -173,6 +203,7 @@ def build_table(
     *,
     stretch_column: int | None = -1,
     min_stretch_width: int = MIN_STRETCH_WIDTH,
+    fit_to_viewport: bool = False,
     secondary_sort: tuple[str, Qt.SortOrder] | None = None,
 ) -> tuple[RowsTableView, SortedFilterProxy]:
     """Таблица с сортировкой по клику на заголовок и прокси-моделью для фильтра.
@@ -180,6 +211,7 @@ def build_table(
     `stretch_column` — колонка, забирающая свободное место: `-1` — последняя,
     `None` — свободное место остаётся справа от таблицы, число — указанная.
     `min_stretch_width` — ширина, до которой колонка сжимается при нехватке места.
+    `fit_to_viewport` — подогнать все колонки под видимую ширину без прокрутки.
     `secondary_sort` — заголовок и направление дополнительной сортировки при
     совпадении значения основной колонки.
     """
@@ -194,6 +226,7 @@ def build_table(
     view = RowsTableView(
         stretch_column=None if stretch_column is None else stretch_column,
         min_stretch_width=min_stretch_width,
+        fit_to_viewport=fit_to_viewport,
     )
     view.setModel(proxy)
     view.setSortingEnabled(True)

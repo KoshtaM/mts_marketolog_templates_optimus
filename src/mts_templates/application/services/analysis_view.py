@@ -201,8 +201,6 @@ def to_action_center_view(
         total_monthly_benefit=center.total_monthly_benefit,
         loss_templates=center.loss_templates,
         profitable_candidates=center.profitable_candidates,
-        untriggered_loss=center.untriggered_loss,
-        untriggered_messages=center.untriggered_messages,
         unmatched_templated_messages=center.unmatched_templated_messages,
         unmatched_templated_segments=center.unmatched_templated_segments,
         unmatched_templated_cost=center.unmatched_templated_cost,

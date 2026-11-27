@@ -294,16 +294,11 @@ export interface MatchedMessage {
   delivery_status: string
 }
 
-export type ActionKind =
-  | 'loss_template'
-  | 'unworking_template'
-  | 'profitable_candidate'
-  | 'untriggered'
-  | 'unmatched_templated'
+export type ActionKind = 'loss_template' | 'unworking_template' | 'profitable_candidate'
 
 export type Action = 'delete' | 'add'
 
-export type ActionDrillDown = 'template' | 'unmatched_templated'
+export type ActionDrillDown = 'template'
 
 export interface ActionItem {
   key: string
@@ -334,8 +329,6 @@ export interface ActionCenter {
   total_monthly_benefit: string
   loss_templates: number
   profitable_candidates: number
-  untriggered_loss: string
-  untriggered_messages: number
   unmatched_templated_messages: number
   unmatched_templated_segments: number
   unmatched_templated_cost: string

@@ -15,7 +15,6 @@ interface DialogState {
   heading: string
   text: string
   operator: string | null
-  untriggeredOnly: boolean
 }
 
 const kindFilter = ref<KindFilter>('all')
@@ -29,8 +28,6 @@ const kindLabels: Record<ActionKind, string> = {
   loss_template: 'Убыточный шаблон',
   unworking_template: 'Неработающий',
   profitable_candidate: 'Выгодный кандидат',
-  untriggered: 'Срабатывание ниже 100 %',
-  unmatched_templated: 'Шаблонировано без шаблона',
 }
 
 const actionLabels: Record<Action, string> = {
@@ -43,28 +40,19 @@ const counts = computed<Record<ActionKind, number>>(() => {
     loss_template: 0,
     unworking_template: 0,
     profitable_candidate: 0,
-    untriggered: 0,
-    unmatched_templated: 0,
   }
   for (const item of items.value) result[item.kind] += 1
   return result
 })
 
 const filters = computed(() =>
-  (
-    [
-      'all',
-      'loss_template',
-      'unworking_template',
-      'profitable_candidate',
-      'untriggered',
-      'unmatched_templated',
-    ] as KindFilter[]
-  ).map((kind) => ({
-    kind,
-    label: kind === 'all' ? 'Все' : kindLabels[kind],
-    count: kind === 'all' ? items.value.length : counts.value[kind],
-  })),
+  (['all', 'loss_template', 'unworking_template', 'profitable_candidate'] as KindFilter[]).map(
+    (kind) => ({
+      kind,
+      label: kind === 'all' ? 'Все' : kindLabels[kind],
+      count: kind === 'all' ? items.value.length : counts.value[kind],
+    }),
+  ),
 )
 
 const filtered = computed(() => {
@@ -89,8 +77,7 @@ const totalLoss = computed(() => moneyValue(center.value?.total_monthly_loss ?? 
 const totalBenefit = computed(() => moneyValue(center.value?.total_monthly_benefit ?? 0))
 
 function lossText(item: ActionItem): string {
-  if (item.kind === 'unmatched_templated' || moneyValue(item.monthly_loss) === 0) return '—'
-  return money(item.monthly_loss, 0)
+  return moneyValue(item.monthly_loss) > 0 ? money(item.monthly_loss, 0) : '—'
 }
 
 function benefitText(item: ActionItem): string {
@@ -112,7 +99,7 @@ const methodology = computed(() => {
   } else {
     parts.push('период полный, суммы не масштабируются')
   }
-  return `Методика: потери — фактическая стоимость минус оценка по шаблонированной ставке; выгода — месячная выгода кандидатов после вычета стоимости шаблона; ${parts.join('; ')}.`
+  return `Методика: убыток шаблона — ежемесячная плата за вычетом выгоды от экономии сегментов; выгода кандидата — месячная экономия за вычетом стоимости шаблона; ${parts.join('; ')}.`
 })
 
 function severityLabel(item: ActionItem): string {
@@ -127,25 +114,13 @@ function severityClass(item: ActionItem): string {
 }
 
 function showMessages(item: ActionItem): void {
-  if (item.kind === 'unmatched_templated' || item.drill_down === 'unmatched_templated') {
-    dialog.value = {
-      targetType: 'unmatched',
-      targetId: '',
-      heading: item.title,
-      text: '',
-      operator: null,
-      untriggeredOnly: false,
-    }
-    return
-  }
-  if (!item.template_id) return
+  if (!item.template_id || item.drill_down !== 'template') return
   dialog.value = {
     targetType: 'template',
     targetId: item.template_id,
     heading: item.template_name || item.subject || item.title,
     text: item.subject,
     operator: item.operator,
-    untriggeredOnly: item.kind === 'untriggered',
   }
 }
 
@@ -211,10 +186,10 @@ watch(
     <template v-else-if="center">
       <section class="action-kpis">
         <KpiCard
-          label="Потери в месяц"
+          label="Убыток в месяц"
           :value="money(center.total_monthly_loss, 0)"
           :tone="totalLoss > 0 ? 'negative' : 'positive'"
-          hint="оценка по шаблонированной ставке"
+          hint="убыточные и неработающие шаблоны"
         />
         <KpiCard
           label="Выгода действий"
@@ -223,10 +198,10 @@ watch(
           :hint="`${integer(center.profitable_candidates)} кандидатов на добавление`"
         />
         <KpiCard
-          label="Срабатывание ниже 100 %"
-          :value="money(center.untriggered_loss, 0)"
-          :tone="moneyValue(center.untriggered_loss) > 0 ? 'negative' : 'default'"
-          :hint="`${integer(center.untriggered_messages)} сообщений`"
+          label="Кандидаты на добавление"
+          :value="integer(center.profitable_candidates)"
+          :tone="center.profitable_candidates > 0 ? 'positive' : 'default'"
+          hint="выгодные кандидаты после вычета платы"
         />
         <KpiCard
           label="Убыточные шаблоны"
@@ -256,7 +231,6 @@ watch(
               heading: 'Сообщения без зарегистрированного шаблона',
               text: '',
               operator: null,
-              untriggeredOnly: false,
             }
           "
         >
@@ -298,34 +272,38 @@ watch(
         <div v-if="!filtered.length" class="empty">
           По этому фильтру пунктов нет — значит, по выбранной загрузке всё в порядке.
         </div>
-        <div v-else class="table-wrap">
-          <table class="data">
+        <div v-else class="table-wrap action-wrap">
+          <table class="data action-table">
+            <colgroup>
+              <col style="width: 9%" />
+              <col style="width: 8%" />
+              <col style="width: 20%" />
+              <col style="width: 25%" />
+              <col style="width: 8%" />
+              <col style="width: 7%" />
+              <col style="width: 7%" />
+              <col style="width: 8%" />
+              <col style="width: 8%" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Приоритет</th>
-                <th>Проблема / возможность</th>
                 <th>Действие</th>
+                <th>Проблема / возможность</th>
                 <th>Шаблон / объект</th>
                 <th>Оператор</th>
                 <th class="num">Сообщений</th>
                 <th class="num">Сегментов</th>
-                <th class="num">Потери/мес</th>
-                <th class="num">Выгода/мес</th>
-                <th></th>
+                <th class="num">Убыток</th>
+                <th class="num">Выгода</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="item in filtered" :key="item.key">
                 <td>
-                  <span class="badge" :class="severityClass(item)">{{ severityLabel(item) }}</span>
-                </td>
-                <td>
-                  <div class="cell-clamp" :title="`${item.title}. ${item.detail} ${item.recommendation}`">
-                    {{ item.title }}
-                  </div>
-                  <div class="tiny muted cell-clamp" :title="item.recommendation">
-                    {{ item.recommendation }}
-                  </div>
+                  <span class="badge" :class="severityClass(item)" :title="severityLabel(item)">
+                    {{ severityLabel(item) }}
+                  </span>
                 </td>
                 <td>
                   <span v-if="item.action" class="action-badge" :class="`act-${item.action}`">
@@ -334,37 +312,45 @@ watch(
                   <span v-else class="muted">—</span>
                 </td>
                 <td>
+                  <button
+                    v-if="item.drill_down === 'template'"
+                    class="link-button cell-clamp"
+                    type="button"
+                    :title="`${item.title}. ${item.detail} ${item.recommendation}`"
+                    @click.stop="showMessages(item)"
+                  >
+                    {{ item.title }}
+                  </button>
+                  <div
+                    v-else
+                    class="cell-clamp"
+                    :title="`${item.title}. ${item.detail} ${item.recommendation}`"
+                  >
+                    {{ item.title }}
+                  </div>
+                  <div class="tiny muted cell-clamp" :title="item.recommendation">
+                    {{ item.recommendation }}
+                  </div>
+                </td>
+                <td>
                   <div class="cell-clamp" :title="item.subject">{{ item.subject }}</div>
                 </td>
-                <td>{{ item.operator || '—' }}</td>
+                <td :title="item.operator || '—'">{{ item.operator || '—' }}</td>
                 <td class="num">{{ integer(item.messages) }}</td>
                 <td class="num">{{ integer(item.segments) }}</td>
                 <td
                   class="num"
-                  :class="{
-                    negative: moneyValue(item.monthly_loss) > 0,
-                    muted: item.kind === 'unmatched_templated',
-                  }"
-                  :title="item.detail"
+                  :class="{ negative: moneyValue(item.monthly_loss) > 0 }"
+                  :title="`убыток в месяц: ${item.detail}`"
                 >
-                  {{ item.kind === 'unmatched_templated' ? 'инфо' : lossText(item) }}
+                  {{ lossText(item) }}
                 </td>
                 <td
                   class="num"
                   :class="{ positive: moneyValue(item.monthly_benefit) > 0 }"
-                  :title="item.detail"
+                  :title="`выгода в месяц: ${item.detail}`"
                 >
                   {{ benefitText(item) }}
-                </td>
-                <td>
-                  <button
-                    v-if="item.drill_down"
-                    class="btn btn-ghost action-link"
-                    type="button"
-                    @click="showMessages(item)"
-                  >
-                    Сообщения
-                  </button>
                 </td>
               </tr>
             </tbody>
@@ -390,7 +376,6 @@ watch(
       :heading="dialog.heading"
       :text="dialog.text"
       :operator="dialog.operator"
-      :untriggered-only="dialog.untriggeredOnly"
       @close="dialog = null"
     />
   </div>
@@ -418,6 +403,27 @@ watch(
 
 .action-table-header {
   align-items: flex-end;
+}
+
+/* Все колонки помещаются в ширину таблицы: длинный текст обрезается,
+   полное значение доступно в подсказке ячейки. */
+.action-wrap {
+  overflow-x: hidden;
+}
+
+.action-table {
+  table-layout: fixed;
+}
+
+.action-table th,
+.action-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-table td > .cell-clamp {
+  width: 100%;
 }
 
 .chips {
@@ -454,11 +460,6 @@ watch(
 .chip-count {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.action-link {
-  padding: 2px 6px;
-  white-space: nowrap;
 }
 
 .badge.sev-1 {

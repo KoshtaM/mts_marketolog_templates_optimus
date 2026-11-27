@@ -1,4 +1,4 @@
-"""Экран «Центр действий»: рабочий список потерь и проблем по загрузке."""
+"""Экран «Центр действий»: рабочий список убытков и возможностей по загрузке."""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ from mts_templates.application.dto import (
 from mts_templates.application.use_cases.dashboard import ListBatches
 from mts_templates.application.use_cases.get_action_center import GetActionCenter
 from mts_templates.application.use_cases.list_matched_messages import ListMatchedMessages
+from mts_templates.domain.value_objects import Money
 from mts_templates.presentation.desktop.benefit_style import RowPalette, row_palette, semantic_text
 from mts_templates.presentation.desktop.dialogs.matched_messages_dialog import MatchedMessagesDialog
 from mts_templates.presentation.desktop.formatting import (
@@ -66,6 +67,11 @@ def _action_title(action: str) -> str:
     return {"delete": "Удалить", "add": "Добавить"}.get(action, "—")
 
 
+def _money_or_dash(value: Money) -> str:
+    """Пустая ячейка вместо нуля: убыток и выгода не заполняются вместе."""
+    return "—" if value.amount == 0 else format_money(value)
+
+
 COLUMNS = (
     Column(
         "Приоритет",
@@ -75,17 +81,17 @@ COLUMNS = (
         tooltip=lambda item: _severity_title(item.severity),
     ),
     Column(
-        "Проблема / возможность",
-        lambda item: item.title,
-        width=300,
-        tooltip=lambda item: f"{item.title}. {item.detail}",
-    ),
-    Column(
         "Действие",
         lambda item: item.action or "",
         formatter=_action_title,
         width=90,
         tooltip=lambda item: item.recommendation,
+    ),
+    Column(
+        "Проблема / возможность",
+        lambda item: item.title,
+        width=300,
+        tooltip=lambda item: f"{item.title}. {item.detail}. {item.recommendation}",
     ),
     Column(
         "Шаблон / объект",
@@ -97,18 +103,22 @@ COLUMNS = (
     Column("Сообщений", lambda item: item.messages, formatter=format_int, width=90),
     Column("Сегментов", lambda item: item.segments, formatter=format_int, width=90),
     Column(
-        "Потери/мес",
+        "Убыток",
         lambda item: item.monthly_loss,
-        formatter=format_money,
+        formatter=_money_or_dash,
         width=110,
-        tooltip=lambda item: f"за период: {format_money(item.monthly_loss)}",
+        tooltip=lambda item: (
+            f"убыток в месяц: {item.detail}" if item.monthly_loss.amount > 0 else ""
+        ),
     ),
     Column(
-        "Выгода/мес",
+        "Выгода",
         lambda item: item.monthly_benefit,
-        formatter=format_money,
+        formatter=_money_or_dash,
         width=110,
-        tooltip=lambda item: f"месячная выгода действия: {format_money(item.monthly_benefit)}",
+        tooltip=lambda item: (
+            f"выгода в месяц: {item.detail}" if item.monthly_benefit.amount > 0 else ""
+        ),
     ),
 )
 
@@ -120,7 +130,7 @@ def _theme_row_palette() -> RowPalette:
 
 
 class ActionCenterPage(QWidget):
-    """Рабочий список проблем и возможностей с рекомендациями действий."""
+    """Рабочий список убытков и возможностей с рекомендациями действий."""
 
     def __init__(
         self,
@@ -149,16 +159,18 @@ class ActionCenterPage(QWidget):
         self._warnings.setObjectName("warningsView")
         self._warnings.setReadOnly(True)
         self._warnings.setMaximumHeight(180)
-        self._total_loss = BenefitTotal("Потери в месяц", self, inline=True)
-        self._total_benefit = BenefitTotal("Выгода действий, ₽/мес", self, inline=True)
-        self._untriggered_loss = BenefitTotal(
-            "Срабатывание ниже 100 %, ₽/мес",
-            self,
-            inline=True,
-        )
+        self._total_loss = BenefitTotal("Убыток в месяц", self, inline=True)
+        self._total_benefit = BenefitTotal("Выгода в месяц", self, inline=True)
+        self._candidates_total = BenefitTotal("Кандидатов на добавление", self, inline=True)
         self._unmatched_label = QLabel("", self)
+        self._unmatched_messages_button = QPushButton("Показать сообщения", self)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
-        self._table, self._proxy = build_table(self._model, self, stretch_column=3)
+        self._table, self._proxy = build_table(
+            self._model,
+            self,
+            stretch_column=None,
+            fit_to_viewport=True,
+        )
         sort_by_title(self._table, "Приоритет", Qt.SortOrder.DescendingOrder)
         self._busy = BusyOverlay(self._table)
 
@@ -181,9 +193,13 @@ class ActionCenterPage(QWidget):
         losses_row = QHBoxLayout()
         losses_row.addWidget(self._total_loss, stretch=1)
         losses_row.addWidget(self._total_benefit, stretch=1)
-        losses_row.addWidget(self._untriggered_loss, stretch=1)
+        losses_row.addWidget(self._candidates_total, stretch=1)
         layout.addLayout(losses_row)
-        layout.addWidget(self._unmatched_label)
+
+        unmatched_row = QHBoxLayout()
+        unmatched_row.addWidget(self._unmatched_label, stretch=1)
+        unmatched_row.addWidget(self._unmatched_messages_button)
+        layout.addLayout(unmatched_row)
 
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self._table)
@@ -199,6 +215,7 @@ class ActionCenterPage(QWidget):
         self._batch_combo.currentIndexChanged.connect(self._batch_changed)
         self._table.selectionModel().currentRowChanged.connect(self._selection_changed)
         self._table.clicked.connect(self._cell_clicked)
+        self._unmatched_messages_button.clicked.connect(self._open_unmatched_messages)
 
     def _build_warnings(self) -> QWidget:
         container = QWidget(self)
@@ -236,7 +253,7 @@ class ActionCenterPage(QWidget):
             self._warnings.setPlainText("")
             self._model.set_rows(())
             self._reset_totals()
-            self._unmatched_label.setVisible(False)
+            self._set_unmatched_visible(False)
             self._filter.clear()
 
     def refresh_theme(self) -> None:
@@ -249,7 +266,7 @@ class ActionCenterPage(QWidget):
         self._model.set_rows(())
         self._batch_id = None
         self._reset_totals()
-        self._unmatched_label.setVisible(False)
+        self._set_unmatched_visible(False)
         self._summary.setText("Нажмите «Выполнить анализ», чтобы собрать центр действий.")
         self._warnings.setPlainText("")
 
@@ -274,15 +291,12 @@ class ActionCenterPage(QWidget):
         self._batch_id = center.batch_id
         self._model.set_rows(center.items)
         self._apply_filter(self._filter.text())
-        fit_columns(
-            self._table,
-            max_widths={1: 300, 2: 90, 3: 360, 4: 120, 5: 90, 6: 90, 7: 110, 8: 110},
-        )
+        fit_columns(self._table, max_widths={2: 300, 3: 360, 4: 120})
         self._apply_totals(center)
         summary = (
             f"Период {format_period(center.period_from, center.period_to)} · "
-            f"потери в месяц {format_money(center.total_monthly_loss)} · "
-            f"выгода действий {format_money(center.total_monthly_benefit)} · "
+            f"убыток в месяц {format_money(center.total_monthly_loss)} · "
+            f"выгода в месяц {format_money(center.total_monthly_benefit)} · "
             f"шаблонов с убытком {format_int(center.loss_templates)} · "
             f"кандидатов на добавление {format_int(center.profitable_candidates)} · "
             f"несопоставленных шаблонированных {format_int(center.unmatched_templated_messages)}"
@@ -305,17 +319,21 @@ class ActionCenterPage(QWidget):
             format_money(center.total_monthly_benefit),
             benefit_color if center.total_monthly_benefit.amount > 0 else neutral,
         )
-        self._untriggered_loss.set_value(
-            format_money(center.untriggered_loss),
-            loss_color if center.untriggered_loss.amount > 0 else neutral,
+        self._candidates_total.set_value(
+            format_int(center.profitable_candidates),
+            benefit_color if center.profitable_candidates > 0 else neutral,
         )
-        self._unmatched_label.setVisible(center.unmatched_templated_messages > 0)
+        self._set_unmatched_visible(center.unmatched_templated_messages > 0)
         if center.unmatched_templated_messages > 0:
             self._unmatched_label.setText(
                 f"Шаблонировано без шаблона: {format_int(center.unmatched_templated_messages)} сообщений "
                 f"· {format_int(center.unmatched_templated_segments)} сегментов · "
                 f"оплачено за период {format_money(center.unmatched_templated_cost)}"
             )
+
+    def _set_unmatched_visible(self, visible: bool) -> None:
+        self._unmatched_label.setVisible(visible)
+        self._unmatched_messages_button.setVisible(visible)
 
     def _select_first_row(self) -> None:
         if self._proxy.rowCount() > 0:
@@ -336,9 +354,28 @@ class ActionCenterPage(QWidget):
 
     def _cell_clicked(self, index: QModelIndex) -> None:
         source = self._proxy.mapToSource(index)
-        if not source.isValid() or source.column() != 1:
+        if not source.isValid() or source.column() != 2:
             return
         self._open_drill_down(source.row())
+
+    def _open_unmatched_messages(self) -> None:
+        batch_id = self._batch_id
+        if not batch_id:
+            return
+        self._set_busy(True, "Загрузка сообщений…")
+        self._runner.run(
+            lambda token: self._matched_messages.unmatched_templated(
+                batch_id,
+                should_cancel=lambda: token.cancelled,
+            ),
+            on_success=lambda rows: self._open_messages_dialog(
+                rows,
+                title="Сообщения без зарегистрированного шаблона",
+                template_text=rows[0].text if rows else "",
+                text_label="Текст сообщения:",
+            ),
+            on_error=self._messages_failed,
+        )
 
     def _open_drill_down(self, row: int) -> None:
         item: ActionItemView = self._model.row_at(row)
@@ -346,16 +383,6 @@ class ActionCenterPage(QWidget):
         if not batch_id or item.drill_down is None:
             return
         self._set_busy(True, "Загрузка сообщений…")
-        if item.kind == "unmatched_templated" or item.drill_down == "unmatched_templated":
-            self._runner.run(
-                lambda token: self._matched_messages.unmatched_templated(
-                    batch_id,
-                    should_cancel=lambda: token.cancelled,
-                ),
-                on_success=lambda rows: self._open_messages_dialog(rows, item, unmatched=True),
-                on_error=self._messages_failed,
-            )
-            return
         template_id = item.template_id
         if not template_id:
             return
@@ -363,33 +390,31 @@ class ActionCenterPage(QWidget):
             lambda token: self._matched_messages.for_template(
                 batch_id,
                 template_id,
-                operator=item.operator,
-                untriggered_only=item.kind == "untriggered",
                 should_cancel=lambda: token.cancelled,
             ),
-            on_success=lambda rows: self._open_messages_dialog(rows, item, unmatched=False),
+            on_success=lambda rows: self._open_messages_dialog(
+                rows,
+                title=item.title,
+                template_text=item.subject,
+            ),
             on_error=self._messages_failed,
         )
 
     def _open_messages_dialog(
         self,
         rows: Sequence[MatchedMessageView],
-        item: ActionItemView,
         *,
-        unmatched: bool,
+        title: str,
+        template_text: str,
+        text_label: str = "Полный текст шаблона:",
     ) -> None:
         self._set_busy(False)
         if self._messages_dialog is None:
             self._messages_dialog = MatchedMessagesDialog(self)
-        text = item.subject
-        text_label = "Полный текст шаблона:"
-        if unmatched and rows:
-            text = rows[0].text
-            text_label = "Текст сообщения:"
         self._messages_dialog.set_rows(
             list(rows),
-            title=item.title,
-            template_text=text,
+            title=title,
+            template_text=template_text,
             text_label=text_label,
         )
         self._messages_dialog.show()
@@ -414,4 +439,4 @@ class ActionCenterPage(QWidget):
     def _reset_totals(self) -> None:
         self._total_loss.reset()
         self._total_benefit.reset()
-        self._untriggered_loss.reset()
+        self._candidates_total.reset()

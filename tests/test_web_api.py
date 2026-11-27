@@ -292,24 +292,18 @@ def test_action_center_and_drill_down(client: TestClient, tmp_path: Path) -> Non
     assert center["unmatched_templated_segments"] == 1
     assert center["unmatched_templated_cost"] == "5.00"
     assert center["total_monthly_loss"] == "1988.70"
-    assert center["total_monthly_benefit"] == "1988.70"
+    assert center["total_monthly_benefit"] == "0.00"
     assert center["observed_templated_rate"] == "4.33"
-    assert [item["kind"] for item in center["items"]] == [
-        "loss_template",
-        "unmatched_templated",
-    ]
+    assert [item["kind"] for item in center["items"]] == ["loss_template"]
+    assert "untriggered_loss" not in center
+    assert "untriggered_messages" not in center
 
-    loss_item, unmatched_item = center["items"]
+    loss_item = center["items"][0]
     assert loss_item["severity"] == 1
     assert loss_item["monthly_loss"] == "1988.70"
-    assert loss_item["monthly_benefit"] == "1988.70"
+    assert loss_item["monthly_benefit"] == "0.00"
     assert loss_item["action"] == "delete"
     assert loss_item["drill_down"] == "template"
-    assert unmatched_item["severity"] == 0
-    assert unmatched_item["monthly_loss"] == "0.00"
-    assert unmatched_item["monthly_benefit"] == "0.00"
-    assert unmatched_item["action"] is None
-    assert unmatched_item["drill_down"] == "unmatched_templated"
 
     template_messages = client.get(
         f"/api/matched-messages/template/{loss_item['template_id']}",

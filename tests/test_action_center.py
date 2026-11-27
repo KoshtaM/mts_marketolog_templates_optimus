@@ -6,8 +6,11 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from mts_templates.domain.analytics.actions import (
     Action,
+    ActionItem,
     ActionKind,
     DrillDown,
     build_action_center,
@@ -136,7 +139,9 @@ def test_loss_template_is_paid_back_by_disabling() -> None:
     assert item.subject == "Ваш код %d"
     assert item.template_id == "t1"
     assert item.drill_down is DrillDown.TEMPLATE
+    assert item.monthly_benefit == Money.zero()
     assert center.total_monthly_loss.rounded().amount == Decimal("1400.00")
+    assert center.total_monthly_benefit == Money.zero()
 
 
 def test_partial_period_scales_monthly_loss() -> None:
@@ -236,32 +241,15 @@ def test_off_operator_is_not_included_in_action_center() -> None:
     assert center.total_monthly_loss == Money.zero()
 
 
-def test_trigger_below_full_marks_listed_operator() -> None:
-    trigger = OperatorTrigger(
-        template_id="t1",
-        operator=Operator.MTS,
-        listed=True,
-        matched_messages=10,
-        triggered_messages=8,
-        matched_segments=10,
-        untriggered_messages=2,
-        untriggered_segments=2,
-        untriggered_cost=Money.from_rub("19.20"),
-    )
+def test_trigger_below_full_is_not_shown_in_action_center() -> None:
+    """Срабатывание ниже 100 % остаётся в разбивке по операторам, не в таблице."""
+    center = build_action_center(_run(metrics=(_loss_metrics(),)), (_template(),))
 
-    center = build_action_center(
-        _run(triggers=(trigger,), templated_rate=Money.from_rub("4")),
-        (_template(),),
-    )
-
-    item = center.items[0]
-    assert item.kind is ActionKind.UNTRIGGERED
-    assert item.monthly_loss.rounded().amount == Decimal("11.20")
-    assert center.untriggered_loss.rounded().amount == Decimal("11.20")
-    assert center.untriggered_messages == 2
+    assert [item.kind for item in center.items] == [ActionKind.LOSS_TEMPLATE]
+    assert all(item.title != "Срабатывание ниже 100 %" for item in center.items)
 
 
-def test_unmatched_templated_is_informational_only() -> None:
+def test_unmatched_templated_stays_outside_table() -> None:
     center = build_action_center(
         _run(
             unmatched_messages=5,
@@ -271,68 +259,26 @@ def test_unmatched_templated_is_informational_only() -> None:
         (_template(),),
     )
 
-    item = center.items[0]
-    assert item.kind is ActionKind.UNMATCHED_TEMPLATED
-    assert item.severity == 0
-    assert item.monthly_loss == Money.zero()
-    assert item.messages == 5
-    assert item.segments == 7
-    assert item.drill_down is DrillDown.UNMATCHED_TEMPLATED
+    assert center.items == ()
     assert center.unmatched_templated_messages == 5
     assert center.unmatched_templated_segments == 7
     assert center.unmatched_templated_cost.rounded().amount == Decimal("35.00")
     assert center.total_monthly_loss == Money.zero()
-
-
-def test_missing_templated_rate_keeps_volumes_without_money() -> None:
-    trigger = OperatorTrigger(
-        template_id="t1",
-        operator=Operator.MTS,
-        listed=True,
-        matched_messages=10,
-        triggered_messages=0,
-        matched_segments=10,
-        untriggered_messages=10,
-        untriggered_segments=10,
-        untriggered_cost=Money.from_rub("100"),
-    )
-
-    center = build_action_center(_run(triggers=(trigger,)), (_template(),))
-
-    item = center.items[0]
-    assert item.monthly_loss == Money.zero()
-    assert item.segments == 10
-    assert center.total_monthly_loss == Money.zero()
-    assert any("Нет наблюдаемой ставки" in warning for warning in center.warnings)
+    assert center.total_monthly_benefit == Money.zero()
 
 
 def test_items_are_sorted_by_monthly_impact() -> None:
-    trigger = OperatorTrigger(
-        template_id="t1",
-        operator=Operator.MTS,
-        listed=True,
-        matched_messages=10,
-        triggered_messages=0,
-        matched_segments=20,
-        untriggered_messages=10,
-        untriggered_segments=20,
-        untriggered_cost=Money.from_rub("200"),
-    )
-
     center = build_action_center(
-        _run(
-            metrics=(_loss_metrics(),),
-            triggers=(trigger,),
-            templated_rate=Money.from_rub("5"),
-        ),
+        _run(metrics=(_loss_metrics(),), candidates=(_candidate("3000"),)),
         (_template(),),
     )
 
     assert [item.kind for item in center.items] == [
+        ActionKind.PROFITABLE_CANDIDATE,
         ActionKind.LOSS_TEMPLATE,
-        ActionKind.UNTRIGGERED,
     ]
-    assert center.total_monthly_loss.rounded().amount == Decimal("1500.00")
+    assert center.total_monthly_loss.rounded().amount == Decimal("1400.00")
+    assert center.total_monthly_benefit.rounded().amount == Decimal("3000.00")
 
 
 def test_unworking_template_offers_delete() -> None:
@@ -340,8 +286,9 @@ def test_unworking_template_offers_delete() -> None:
 
     item = center.items[0]
     assert item.action is Action.DELETE
-    assert item.monthly_benefit.rounded().amount == Decimal("2000.00")
-    assert center.total_monthly_benefit.rounded().amount == Decimal("2000.00")
+    assert item.monthly_benefit == Money.zero()
+    assert item.monthly_loss.rounded().amount == Decimal("2000.00")
+    assert center.total_monthly_benefit == Money.zero()
 
 
 def test_loss_template_action_requires_three_quarters_of_fee() -> None:
@@ -362,7 +309,8 @@ def test_loss_template_action_requires_three_quarters_of_fee() -> None:
     assert below_center.items[0].action is None
     assert below_center.items[0].monthly_benefit == Money.zero()
     assert above_center.items[0].action is Action.DELETE
-    assert above_center.items[0].monthly_benefit.rounded().amount == Decimal("1600.00")
+    assert above_center.items[0].monthly_benefit == Money.zero()
+    assert above_center.items[0].monthly_loss.rounded().amount == Decimal("1600.00")
 
 
 def test_profitable_candidate_offers_add() -> None:
@@ -389,3 +337,36 @@ def test_candidate_at_three_quarters_of_fee_is_skipped() -> None:
     assert center.items == ()
     assert center.profitable_candidates == 0
     assert center.total_monthly_benefit == Money.zero()
+
+
+def test_action_item_rejects_loss_and_benefit_together() -> None:
+    with pytest.raises(ValueError, match="не может быть одновременно"):
+        ActionItem(
+            key="invalid",
+            kind=ActionKind.LOSS_TEMPLATE,
+            severity=1,
+            title="Убыточный шаблон",
+            subject="Ваш код %d",
+            detail="",
+            recommendation="",
+            monthly_loss=Money.from_rub("100"),
+            messages=1,
+            segments=1,
+            monthly_benefit=Money.from_rub("100"),
+        )
+
+
+def test_loss_and_benefit_are_mutually_exclusive() -> None:
+    center = build_action_center(
+        _run(metrics=(_loss_metrics(),), candidates=(_candidate("1600"),)),
+        (_template(),),
+    )
+
+    assert len(center.items) == 2
+    for item in center.items:
+        assert item.monthly_loss == Money.zero() or item.monthly_benefit == Money.zero()
+        assert not (item.monthly_loss.amount > 0 and item.monthly_benefit.amount > 0)
+    assert {item.kind for item in center.items} == {
+        ActionKind.LOSS_TEMPLATE,
+        ActionKind.PROFITABLE_CANDIDATE,
+    }

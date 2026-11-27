@@ -405,7 +405,7 @@ class ActionItemView:
 
 @dataclass(frozen=True, slots=True)
 class ActionCenterView:
-    """Рабочий список проблем и возможностей по выбранной загрузке."""
+    """Рабочий список убытков и возможностей по выбранной загрузке."""
 
     batch_id: str
     period_from: datetime
@@ -416,8 +416,6 @@ class ActionCenterView:
     total_monthly_benefit: Money
     loss_templates: int
     profitable_candidates: int
-    untriggered_loss: Money
-    untriggered_messages: int
     unmatched_templated_messages: int
     unmatched_templated_segments: int
     unmatched_templated_cost: Money

@@ -331,8 +331,6 @@ def action_center_to_dict(view: ActionCenterView) -> dict[str, Any]:
         "total_monthly_benefit": money(view.total_monthly_benefit),
         "loss_templates": view.loss_templates,
         "profitable_candidates": view.profitable_candidates,
-        "untriggered_loss": money(view.untriggered_loss),
-        "untriggered_messages": view.untriggered_messages,
         "unmatched_templated_messages": view.unmatched_templated_messages,
         "unmatched_templated_segments": view.unmatched_templated_segments,
         "unmatched_templated_cost": money(view.unmatched_templated_cost),
