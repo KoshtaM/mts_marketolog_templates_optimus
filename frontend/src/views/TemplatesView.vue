@@ -35,6 +35,7 @@ interface Header {
 const headers: Header[] = [
   { key: 'text', label: 'Шаблон' },
   { key: 'operators', label: 'Операторы' },
+  { key: 'drift', label: 'Дрейф' },
   { key: 'matched_messages', label: 'Сообщений', narrow: true },
   { key: 'delivered_messages', label: 'Достав.', narrow: true },
   { key: 'triggered_messages', label: 'Срабат.', narrow: true },
@@ -268,6 +269,7 @@ onMounted(() => {
                     <span class="badge-text">{{ metric.operators.length ? metric.operators.join(', ') : 'все' }}</span>
                   </span>
                 </td>
+                <td class="num">{{ metric.drift ? '✓' : '✗' }}</td>
                 <td class="num">{{ integer(metric.matched_messages) }}</td>
                 <td class="num">{{ integer(metric.delivered_messages) }}</td>
                 <td class="num">{{ integer(metric.triggered_messages) }}</td>
