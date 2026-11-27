@@ -162,6 +162,29 @@ class AnalysisConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DriftFragmentView:
+    """Фрагмент сравнения текста шаблона и кандидата."""
+
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateDriftView:
+    """Дрейф текста шаблона: кандидат из его изменившихся сообщений."""
+
+    candidate_id: str
+    candidate_text: str
+    similarity: float
+    template_fragments: tuple[DriftFragmentView, ...]
+    candidate_fragments: tuple[DriftFragmentView, ...]
+    removed: tuple[str, ...]
+    added: tuple[str, ...]
+    changed_tokens: int
+    total_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
 class TemplateMetricsView:
     """Метрики шаблона, дополненные его реквизитами для UI."""
 
@@ -190,6 +213,7 @@ class TemplateMetricsView:
     share_of_all_segments: float
     share_of_templated_segments: float
     daily_segments: tuple[DaySegments, ...] = ()
+    drift: TemplateDriftView | None = None
 
 
 @dataclass(frozen=True, slots=True)

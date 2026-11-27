@@ -10,7 +10,9 @@ from mts_templates.application.dto import (
     ActionItemView,
     AnalysisView,
     CandidateView,
+    DriftFragmentView,
     OperatorTriggerView,
+    TemplateDriftView,
     TemplateMetricsView,
 )
 from mts_templates.domain.analytics.actions import ActionCenter
@@ -21,6 +23,7 @@ from mts_templates.domain.analytics.analysis import (
     monthly_factor,
     monthly_net_benefit,
 )
+from mts_templates.domain.analytics.drift import TemplateDrift
 from mts_templates.domain.entities import SmsTemplate
 
 
@@ -43,6 +46,7 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
     factor = monthly_factor(run.period)
     total_segments = _total_segments(run.daily_segments)
     templated_segments = _total_segments(run.daily_templated_segments)
+    drifts = {drift.template_id: _drift_view(drift) for drift in run.template_drifts}
     metrics = tuple(
         TemplateMetricsView(
             template_id=item.template_id,
@@ -74,6 +78,7 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
             share_of_all_segments=_share(item.matched_segments, total_segments),
             share_of_templated_segments=_share(item.matched_segments, templated_segments),
             daily_segments=item.daily_segments,
+            drift=drifts.get(item.template_id),
         )
         for item in run.metrics
     )
@@ -131,6 +136,27 @@ def to_analysis_view(run: AnalysisRun, templates: Sequence[SmsTemplate]) -> Anal
         is_partial_period=run.period.days < PARTIAL_PERIOD_DAYS,
         daily_total_segments=run.daily_segments,
         daily_templated_segments=run.daily_templated_segments,
+    )
+
+
+def _drift_view(drift: TemplateDrift) -> TemplateDriftView:
+    """Дрейф шаблона для UI: фрагменты и доля совпадения."""
+    return TemplateDriftView(
+        candidate_id=drift.candidate_id,
+        candidate_text=drift.candidate_text,
+        similarity=float(drift.similarity),
+        template_fragments=tuple(
+            DriftFragmentView(kind=fragment.kind.value, text=fragment.text)
+            for fragment in drift.template_fragments
+        ),
+        candidate_fragments=tuple(
+            DriftFragmentView(kind=fragment.kind.value, text=fragment.text)
+            for fragment in drift.candidate_fragments
+        ),
+        removed=drift.removed,
+        added=drift.added,
+        changed_tokens=drift.changed_tokens,
+        total_tokens=drift.total_tokens,
     )
 
 

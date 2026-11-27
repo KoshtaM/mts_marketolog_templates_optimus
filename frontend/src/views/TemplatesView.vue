@@ -15,7 +15,7 @@ import {
   selectBatch,
   state,
 } from '../store'
-import type { DaySegments, TemplateMetrics, TemplateTrend } from '../types'
+import type { DaySegments, DriftFragment, TemplateMetrics, TemplateTrend } from '../types'
 
 const selectedId = ref('')
 const filter = ref('')
@@ -140,6 +140,12 @@ function toggleSort(key: string): void {
     sortKey.value = key
     sortDir.value = -1
   }
+}
+
+function driftClass(kind: DriftFragment['kind']): string {
+  if (kind === 'removed') return 'drift-removed'
+  if (kind === 'added') return 'drift-added'
+  return 'drift-equal'
 }
 
 function openMessages(metric: TemplateMetrics): void {
@@ -301,6 +307,31 @@ onMounted(() => {
               <input v-model="templatedOnly" type="checkbox" />
               Только шаблонированные
             </label>
+          </div>
+          <div v-if="selected?.drift" class="drift-alert">
+            <div class="drift-title">
+              Текст сообщений изменился · похожесть {{ share(selected.drift.similarity) }}
+            </div>
+            <div class="drift-line">
+              <span class="drift-label">Было</span>
+              <span class="drift-text">
+                <span
+                  v-for="(fragment, index) in selected.drift.template_fragments"
+                  :key="`before-${index}`"
+                  :class="driftClass(fragment.kind)"
+                >{{ fragment.text }}</span>
+              </span>
+            </div>
+            <div class="drift-line">
+              <span class="drift-label">Стало</span>
+              <span class="drift-text">
+                <span
+                  v-for="(fragment, index) in selected.drift.candidate_fragments"
+                  :key="`after-${index}`"
+                  :class="driftClass(fragment.kind)"
+                >{{ fragment.text }}</span>
+              </span>
+            </div>
           </div>
           <div v-if="selected" class="chart-fit">
             <SegmentChart
@@ -527,6 +558,47 @@ onMounted(() => {
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
+}
+
+.drift-alert {
+  margin: 0 0 calc(var(--space) * 1.25);
+  padding: calc(var(--space) * 1.25) calc(var(--space) * 1.75);
+  border: var(--border-width) solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+
+.drift-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.drift-line {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.drift-label {
+  display: inline-block;
+  min-width: 52px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.drift-text > span {
+  margin-right: 0.3em;
+}
+
+.drift-removed {
+  color: var(--negative);
+  text-decoration: line-through;
+}
+
+.drift-added {
+  color: var(--positive);
+  font-weight: 700;
 }
 
 @media (max-width: 1180px) {

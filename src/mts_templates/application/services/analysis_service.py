@@ -28,6 +28,7 @@ from mts_templates.domain.analytics.csg import (
     build_signature_groups,
     extract_candidates,
 )
+from mts_templates.domain.analytics.drift import detect_template_drifts
 from mts_templates.domain.analytics.matching import (
     compile_templates,
     is_candidate_message,
@@ -58,6 +59,7 @@ SEGMENTATION_VERSION = 2
 CANDIDATE_TEXT_VERSION = 2
 DAILY_SERIES_VERSION = 2
 ACTION_CENTER_VERSION = 2
+DRIFT_VERSION = 1
 
 
 def compute_config_hash(
@@ -74,6 +76,7 @@ def compute_config_hash(
         "candidate_text": CANDIDATE_TEXT_VERSION,
         "daily_series": DAILY_SERIES_VERSION,
         "action_center": ACTION_CENTER_VERSION,
+        "drift": DRIFT_VERSION,
         "delivered_only": config.delivered_only,
         "min_support": config.min_support,
         "min_cluster_segments": config.min_cluster_segments,
@@ -221,6 +224,19 @@ def compute_analysis(
             should_cancel=should_cancel,
         )
 
+    drifts = detect_template_drifts(
+        metrics,
+        candidates,
+        templates,
+        policy=policy,
+        sender_case_sensitive=config.sender_case_sensitive,
+    )
+    if drifts:
+        warnings.append(
+            f"Шаблонов с изменившимся текстом сообщений: {len(drifts)} — из этих сообщений "
+            "образованы кандидаты. Место изменения показано в мини-дашборде шаблона."
+        )
+
     if period.days < PARTIAL_PERIOD_DAYS:
         warnings.append(
             f"Период анализа неполный ({period.days} дн.): суммы показаны за период, "
@@ -252,6 +268,7 @@ def compute_analysis(
         unmatched_templated_messages=unmatched_templated,
         unmatched_templated_segments=unmatched_templated_segments,
         unmatched_templated_cost=unmatched_templated_cost,
+        template_drifts=drifts,
     )
 
 

@@ -38,6 +38,12 @@ from mts_templates.domain.analytics.csg import (
     lint_template,
     merge_signature_groups,
 )
+from mts_templates.domain.analytics.drift import (
+    DriftFragment,
+    DriftFragmentKind,
+    TemplateDrift,
+    detect_template_drifts,
+)
 from mts_templates.domain.analytics.import_aggregation import (
     AggregationResult,
     QualityIssue,
@@ -78,6 +84,8 @@ __all__ = [
     "CsgCandidate",
     "CsgConfig",
     "CsgExtraction",
+    "DriftFragment",
+    "DriftFragmentKind",
     "ElementKind",
     "Issue",
     "NormalizationPolicy",
@@ -89,6 +97,7 @@ __all__ = [
     "SignatureGroup",
     "TemplateActivity",
     "TemplateBenefit",
+    "TemplateDrift",
     "TemplateMetrics",
     "Token",
     "TokenKind",
@@ -102,6 +111,7 @@ __all__ = [
     "compile_template",
     "compile_templates",
     "count_segments",
+    "detect_template_drifts",
     "emit_template",
     "extract_candidates",
     "lint_template",

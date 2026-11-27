@@ -65,6 +65,8 @@ from mts_templates.presentation.desktop.theme import active_palette
 from mts_templates.presentation.desktop.widgets.benefit_totals import BenefitTotal
 from mts_templates.presentation.desktop.widgets.busy_overlay import BusyOverlay
 from mts_templates.presentation.desktop.widgets.segment_dashboard import (
+    DashboardDrift,
+    DashboardDriftFragment,
     DashboardSeries,
     DashboardTile,
     SegmentDashboard,
@@ -651,5 +653,25 @@ def _template_series(metric: TemplateMetricsView | None) -> DashboardSeries | No
             DashboardTile(format_percent(metric.share_of_templated_segments)),
             DashboardTile(format_money(benefit), tone),
             DashboardTile(format_percent(metric.trigger_rate)),
+        ),
+        drift=_dashboard_drift(metric),
+    )
+
+
+def _dashboard_drift(metric: TemplateMetricsView) -> DashboardDrift | None:
+    """Дрейф шаблона для пометки в мини-дашборде."""
+    drift = metric.drift
+    if drift is None:
+        return None
+    return DashboardDrift(
+        similarity=drift.similarity,
+        candidate_text=drift.candidate_text,
+        before=tuple(
+            DashboardDriftFragment(kind=fragment.kind, text=fragment.text)
+            for fragment in drift.template_fragments
+        ),
+        after=tuple(
+            DashboardDriftFragment(kind=fragment.kind, text=fragment.text)
+            for fragment in drift.candidate_fragments
         ),
     )

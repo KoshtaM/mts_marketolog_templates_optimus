@@ -10,6 +10,11 @@ from typing import Any
 
 from mts_templates.domain.analytics.activity import DaySegments, OperatorTrigger, TemplateMetrics
 from mts_templates.domain.analytics.analysis import AnalysisRun, CandidateGroup
+from mts_templates.domain.analytics.drift import (
+    DriftFragment,
+    DriftFragmentKind,
+    TemplateDrift,
+)
 from mts_templates.domain.value_objects import Money, Operator, Period
 from mts_templates.infrastructure.persistence.sqlite.database import Database
 from mts_templates.infrastructure.persistence.sqlite.repositories import (
@@ -114,6 +119,9 @@ class SqliteAnalysisRepository:
                                     for candidate in run.candidates
                                     if candidate.daily_segments
                                 },
+                                "template_drifts": [
+                                    _drift_payload(drift) for drift in run.template_drifts
+                                ],
                             },
                             ensure_ascii=False,
                         ),
@@ -237,6 +245,9 @@ class SqliteAnalysisRepository:
             unmatched_templated_segments=int(payload.get("unmatched_templated_segments", 0)),
             unmatched_templated_cost=_payload_money(payload.get("unmatched_templated_cost"))
             or Money.zero(),
+            template_drifts=tuple(
+                _drift_from_payload(item) for item in payload.get("template_drifts", [])
+            ),
         )
 
     def _load_metrics(
@@ -364,6 +375,55 @@ def _operator_trigger(item: dict[str, Any]) -> OperatorTrigger:
         untriggered_messages=int(item.get("untriggered_messages", 0)),
         untriggered_segments=int(item.get("untriggered_segments", 0)),
         untriggered_cost=_payload_money(item.get("untriggered_cost")) or Money.zero(),
+    )
+
+
+def _drift_payload(drift: TemplateDrift) -> dict[str, Any]:
+    """Дрейф шаблона для JSON-payload прогона."""
+    return {
+        "template_id": drift.template_id,
+        "candidate_id": drift.candidate_id,
+        "candidate_text": drift.candidate_text,
+        "similarity": str(drift.similarity),
+        "template_fragments": [
+            {"kind": fragment.kind.value, "text": fragment.text}
+            for fragment in drift.template_fragments
+        ],
+        "candidate_fragments": [
+            {"kind": fragment.kind.value, "text": fragment.text}
+            for fragment in drift.candidate_fragments
+        ],
+        "removed": list(drift.removed),
+        "added": list(drift.added),
+        "changed_tokens": drift.changed_tokens,
+        "total_tokens": drift.total_tokens,
+    }
+
+
+def _drift_from_payload(item: dict[str, Any]) -> TemplateDrift:
+    """Восстановить дрейф шаблона из JSON-payload."""
+    return TemplateDrift(
+        template_id=str(item["template_id"]),
+        candidate_id=str(item["candidate_id"]),
+        candidate_text=str(item["candidate_text"]),
+        similarity=Decimal(str(item["similarity"])),
+        template_fragments=tuple(
+            _drift_fragment(fragment) for fragment in item.get("template_fragments", [])
+        ),
+        candidate_fragments=tuple(
+            _drift_fragment(fragment) for fragment in item.get("candidate_fragments", [])
+        ),
+        removed=tuple(str(value) for value in item.get("removed", [])),
+        added=tuple(str(value) for value in item.get("added", [])),
+        changed_tokens=int(item["changed_tokens"]),
+        total_tokens=int(item["total_tokens"]),
+    )
+
+
+def _drift_fragment(item: dict[str, Any]) -> DriftFragment:
+    return DriftFragment(
+        kind=DriftFragmentKind(str(item["kind"])),
+        text=str(item["text"]),
     )
 
 

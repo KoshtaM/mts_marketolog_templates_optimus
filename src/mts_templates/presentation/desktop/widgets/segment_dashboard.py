@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -27,6 +28,7 @@ from mts_templates.presentation.desktop.daily_chart import (
     merge_day_segments,
 )
 from mts_templates.presentation.desktop.theme import active_palette
+from mts_templates.presentation.desktop.theme_catalog import ThemePalette
 from mts_templates.presentation.desktop.widgets.stacked_bar_chart import StackedBarChart
 
 CHART_TITLE = "Сегменты по дням"
@@ -44,6 +46,24 @@ class DashboardTile:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardDriftFragment:
+    """Фрагмент сравнения текста шаблона и кандидата."""
+
+    kind: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class DashboardDrift:
+    """Дрейф текста шаблона: что было и что стало в сообщениях."""
+
+    similarity: float
+    candidate_text: str
+    before: tuple[DashboardDriftFragment, ...]
+    after: tuple[DashboardDriftFragment, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class DashboardSeries:
     """Ряд выбранного шаблона или кандидата для мини-дашборда.
 
@@ -51,6 +71,7 @@ class DashboardSeries:
     `templated_extra` — сегменты, которые нужно добавить к шаблонированному
     трафику при включённом чекбоксе: так моделируется 100 % срабатывание
     кандидата после его регистрации.
+    `drift` — пометка о том, что текст сообщений шаблона изменился.
     """
 
     title: str
@@ -60,6 +81,89 @@ class DashboardSeries:
     templated_extra: tuple[DaySegments, ...] = ()
     series_label: str = "шаблон"
     matched_label: str = TEMPLATE_MATCHED_LABEL
+    drift: DashboardDrift | None = None
+
+
+class DriftNotice(QFrame):
+    """Пометка о дрейфе текста шаблона с наглядным местом изменения."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("dashboardDriftNotice")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._drift: DashboardDrift | None = None
+
+        self._title = QLabel(self)
+        self._title.setWordWrap(True)
+        self._before = QLabel(self)
+        self._before.setWordWrap(True)
+        self._before.setTextFormat(Qt.TextFormat.RichText)
+        self._after = QLabel(self)
+        self._after.setWordWrap(True)
+        self._after.setTextFormat(Qt.TextFormat.RichText)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(3)
+        layout.addWidget(self._title)
+        layout.addWidget(self._before)
+        layout.addWidget(self._after)
+
+        self.setVisible(False)
+        self.refresh_theme()
+
+    def set_drift(self, drift: DashboardDrift | None) -> None:
+        """Показать дрейф или скрыть пометку, если изменений нет."""
+        self._drift = drift
+        self.setVisible(drift is not None)
+        self._render()
+
+    def refresh_theme(self) -> None:
+        """Пересобрать цвета пометки под активную тему."""
+        palette = active_palette()
+        self.setStyleSheet(
+            f"QFrame#dashboardDriftNotice {{ background: {palette.surface_alt}; "
+            f"border: 1px solid {palette.warning}; border-radius: 8px; }}"
+        )
+        self._title.setStyleSheet(
+            f"color: {semantic_text(palette.warning, palette.surface_alt)}; "
+            "font-size: 12px; font-weight: 600;"
+        )
+        text_color = readable_text_color(palette.surface_alt)
+        for label in (self._before, self._after):
+            label.setStyleSheet(f"color: {text_color}; font-size: 12px;")
+        self._render()
+
+    def _render(self) -> None:
+        drift = self._drift
+        if drift is None:
+            self._title.setText("")
+            self._before.setText("")
+            self._after.setText("")
+            return
+        palette = active_palette()
+        self._title.setText(f"Текст сообщений изменился · похожесть {drift.similarity * 100:.0f} %")
+        self._title.setToolTip(drift.candidate_text)
+        self._before.setText("Было: " + _fragments_html(drift.before, palette))
+        self._after.setText("Стало: " + _fragments_html(drift.after, palette))
+
+
+def _fragments_html(fragments: Sequence[DashboardDriftFragment], palette: ThemePalette) -> str:
+    """Фрагменты сравнения с подсветкой удалённого и добавленного текста."""
+    negative = semantic_text(palette.negative, palette.surface_alt)
+    positive = semantic_text(palette.positive, palette.surface_alt)
+    parts: list[str] = []
+    for fragment in fragments:
+        text = html.escape(fragment.text)
+        if fragment.kind == "removed":
+            parts.append(
+                f'<span style="color: {negative}; text-decoration: line-through;">{text}</span>'
+            )
+        elif fragment.kind == "added":
+            parts.append(f'<span style="color: {positive}; font-weight: 600;">{text}</span>')
+        else:
+            parts.append(text)
+    return " ".join(parts)
 
 
 class MetricTile(QFrame):
@@ -152,6 +256,7 @@ class SegmentDashboard(QWidget):
 
         self._chart = StackedBarChart(CHART_TITLE, self, compact=True)
         self._chart.setMaximumHeight(210)
+        self._drift = DriftNotice(self)
 
         self._tiles = tuple(MetricTile(caption, self) for caption in tile_captions)
         self._empty_title = empty_title
@@ -169,6 +274,8 @@ class SegmentDashboard(QWidget):
         header.addWidget(self._title, stretch=1)
         header.addWidget(self._templated_only)
         layout.addLayout(header)
+
+        layout.addWidget(self._drift)
 
         layout.addWidget(self._chart, stretch=1)
 
@@ -220,6 +327,7 @@ class SegmentDashboard(QWidget):
         )
         for tile in self._tiles:
             tile.refresh_theme()
+        self._drift.refresh_theme()
         self._chart.update()
 
     def _refresh(self) -> None:
@@ -228,6 +336,7 @@ class SegmentDashboard(QWidget):
         if series is None:
             self._title.setText(self._empty_title)
             self._title.setToolTip("")
+            self._drift.set_drift(None)
             for tile in self._tiles:
                 tile.reset()
             self._chart.set_data(())
@@ -235,6 +344,7 @@ class SegmentDashboard(QWidget):
 
         self._title.setText(series.title)
         self._title.setToolTip(series.tooltip)
+        self._drift.set_drift(series.drift)
         for tile, value in zip(self._tiles, series.tiles, strict=True):
             tile.set_value(value.value, tone=value.tone)
         self._refresh_chart()

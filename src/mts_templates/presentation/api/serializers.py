@@ -24,6 +24,7 @@ from mts_templates.application.dto import (
     OperatorStatistics,
     OperatorTriggerView,
     SegmentationStatistics,
+    TemplateDriftView,
     TemplateFilePreview,
     TemplateImportReport,
     TemplateMetricsView,
@@ -189,6 +190,25 @@ def metrics_to_dict(metrics: TemplateMetricsView) -> dict[str, Any]:
         "share_of_all_segments": metrics.share_of_all_segments,
         "share_of_templated_segments": metrics.share_of_templated_segments,
         "daily_segments": [day_segments_to_dict(item) for item in metrics.daily_segments],
+        "drift": None if metrics.drift is None else drift_to_dict(metrics.drift),
+    }
+
+
+def drift_to_dict(drift: TemplateDriftView) -> dict[str, Any]:
+    return {
+        "candidate_id": drift.candidate_id,
+        "candidate_text": drift.candidate_text,
+        "similarity": drift.similarity,
+        "template_fragments": [
+            {"kind": fragment.kind, "text": fragment.text} for fragment in drift.template_fragments
+        ],
+        "candidate_fragments": [
+            {"kind": fragment.kind, "text": fragment.text} for fragment in drift.candidate_fragments
+        ],
+        "removed": list(drift.removed),
+        "added": list(drift.added),
+        "changed_tokens": drift.changed_tokens,
+        "total_tokens": drift.total_tokens,
     }
 
 

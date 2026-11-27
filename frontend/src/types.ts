@@ -165,6 +165,23 @@ export interface DashboardSummary {
   daily_segments: DailySegments[]
 }
 
+export interface DriftFragment {
+  kind: 'equal' | 'removed' | 'added'
+  text: string
+}
+
+export interface TemplateDrift {
+  candidate_id: string
+  candidate_text: string
+  similarity: number
+  template_fragments: DriftFragment[]
+  candidate_fragments: DriftFragment[]
+  removed: string[]
+  added: string[]
+  changed_tokens: number
+  total_tokens: number
+}
+
 export interface TemplateMetrics {
   template_id: string
   name: string
@@ -191,6 +208,7 @@ export interface TemplateMetrics {
   share_of_all_segments: number
   share_of_templated_segments: number
   daily_segments: DaySegments[]
+  drift: TemplateDrift | null
 }
 
 export interface Candidate {

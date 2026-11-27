@@ -163,6 +163,15 @@ presentation/desktop/
   (`_fit_operator_width`); на узком окне части сжимаются до `SUMMARY_MIN_WIDTH`.
   Под таблицей операторов блоков нет — она растягивается во всю высоту секции
   (`stretch=1`).
+- Мини-дашборд `SegmentDashboard` показывает пометку о дрейфе текста шаблона через
+  `DashboardSeries.drift`: `DriftNotice` под шапкой (QFrame, `objectName="dashboardDriftNotice"`,
+  подсветка `palette.warning`) показывает «Текст сообщений изменился · похожесть N %» и две
+  строки «Было» / «Стало»; удалённый фрагмент — зачёркнут (`text-decoration: line-through`,
+  цвет `palette.negative`), добавленный — жирным (`font-weight: 600`, цвет `palette.positive`).
+  `set_drift(drift | None)` — паттерн виджета: `None` скрывает блок; `refresh_theme` перерисовывает
+  при смене темы; `_fragments_html` собирает rich-HTML по `DashboardDriftFragment`
+  (проверка — `tests/test_segment_drift.py`). Кандидат дрейфа — из `TemplateMetricsView.drift`,
+  при смене выделения/фильтра — дашборд пересобирается без повторного анализа.
 - Дневной график шаблона: основной столбец дня — teal (`#0d9488`), весь базовый
   трафик дня. Поверх него на общей базовой высоте (20 % высоты самого маленького
   ненулевого столбца, `OVERLAY_BASE_RATIO`/`overlay_base_offset`) рисуется

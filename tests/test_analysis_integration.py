@@ -90,6 +90,20 @@ def template_rows() -> list[dict[str, object]]:
     ]
 
 
+def drift_statistics_rows() -> list[dict[str, object]]:
+    """Шаблон «Ваш код %d» перестал подпадать: в сообщениях появилось слово «новый»."""
+    sample = statistics_rows()[-1]
+    return [
+        {
+            **sample,
+            "ID сообщения": f"D{index}",
+            "Дата попытки отправки": f"2026-11-{day:02d}T10:00:00+03:00",
+            "Текст сообщения": f"Ваш новый код {2000 + index}",
+        }
+        for index, day in enumerate(CANDIDATE_DAYS)
+    ]
+
+
 def partial_statistics_rows() -> list[dict[str, object]]:
     """Те же строки, но период обрывается 16 ноября: неполный месяц."""
     return [
@@ -489,3 +503,25 @@ def test_dashboard_summary(tmp_path: Path, container) -> None:
         (1, 9)
     ]
     assert summary.segmentation.subscribers_by_operator[0].operator == Operator.MTS.value
+
+
+def test_template_drift_is_detected_and_survives_cache(tmp_path: Path, container) -> None:
+    statistics = write_statistics_xlsx(tmp_path / "statistics.xlsx", drift_statistics_rows())
+    templates = write_templates_xlsx(tmp_path / "templates.xlsx", template_rows())
+
+    import_report = container.import_statistics.execute(ImportStatisticsRequest(path=statistics))
+    container.import_templates.execute(ImportTemplatesRequest(path=templates))
+    request = AnalyzeRequest(batch_id=import_report.batch.id)
+
+    view = container.analyze_templates.execute(request)
+    cached = container.analyze_templates.execute(request)
+
+    metric = next(item for item in view.metrics if item.text == "Ваш код %d")
+    assert metric.matched_messages == 0
+    assert metric.drift is not None
+    assert metric.drift.candidate_text == "Ваш новый код %d"
+    assert metric.drift.added == ("новый",)
+    assert any("изменившимся текстом" in warning for warning in view.warnings)
+
+    cached_metric = next(item for item in cached.metrics if item.text == "Ваш код %d")
+    assert cached_metric.drift == metric.drift

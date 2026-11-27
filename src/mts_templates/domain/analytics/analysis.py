@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from mts_templates.domain.analytics.activity import (
     DaySegments,
@@ -13,6 +14,9 @@ from mts_templates.domain.analytics.activity import (
     ensure_unique_days,
 )
 from mts_templates.domain.value_objects import Money, Operator, Period
+
+if TYPE_CHECKING:
+    from mts_templates.domain.analytics.drift import TemplateDrift
 
 DAYS_IN_MONTH = Decimal("30")
 PARTIAL_PERIOD_DAYS = 28
@@ -108,6 +112,8 @@ class AnalysisRun:
     unmatched_templated_messages: int = 0
     unmatched_templated_segments: int = 0
     unmatched_templated_cost: Money = field(default_factory=Money.zero)
+    # Шаблоны, чей текст перестал подпадать, а сообщения собрались в кандидата.
+    template_drifts: tuple[TemplateDrift, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -130,6 +136,12 @@ class AnalysisRun:
         candidate_ids = [candidate.candidate_id for candidate in self.candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("Кандидаты должны быть уникальны по candidate_id")
+        drift_templates = [drift.template_id for drift in self.template_drifts]
+        if len(drift_templates) != len(set(drift_templates)):
+            raise ValueError("Дрейфы должны быть уникальны по template_id")
+        drift_candidates = [drift.candidate_id for drift in self.template_drifts]
+        if len(drift_candidates) != len(set(drift_candidates)):
+            raise ValueError("Дрейфы должны быть уникальны по candidate_id")
         totals = {item.day: item.segments for item in self.daily_segments}
         templated_totals = {item.day: item.segments for item in self.daily_templated_segments}
         for day, segments in templated_totals.items():
