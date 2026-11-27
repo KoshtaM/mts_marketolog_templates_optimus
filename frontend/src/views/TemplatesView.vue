@@ -310,6 +310,28 @@ onMounted(() => {
               Только шаблонированные
             </label>
           </div>
+          <div v-if="selected" class="chart-fit">
+            <SegmentChart
+              :base="chartBase"
+              :matched="selected.daily_segments"
+              :caption="chartCaption"
+              :matched-label="'Соответствуют шаблону'"
+              :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
+              :height="240"
+            />
+          </div>
+          <div v-else class="empty">Выберите шаблон, чтобы увидеть его сообщения по дням</div>
+        </section>
+
+        <section class="card operator-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Срабатывание по операторам</div>
+              <div class="card-caption">
+                {{ selected ? selected.name || selected.template_id : 'шаблон не выбран' }}
+              </div>
+            </div>
+          </div>
           <div v-if="selected?.drift" class="drift-alert">
             <div class="drift-title" @click="driftOpen = !driftOpen">
               Дрейф шаблона · похожесть {{ share(selected.drift.similarity) }}
@@ -337,29 +359,10 @@ onMounted(() => {
               </div>
             </template>
           </div>
-          <div v-if="selected" class="chart-fit">
-            <SegmentChart
-              :base="chartBase"
-              :matched="selected.daily_segments"
-              :caption="chartCaption"
-              :matched-label="'Соответствуют шаблону'"
-              :series-label="templatedOnly ? 'Остальной шаблонированный трафик' : 'Остальной трафик'"
-              :height="240"
-            />
+          <div v-else-if="selected && !selected.matched_messages" class="empty">
+            Сообщения отсутствуют
           </div>
-          <div v-else class="empty">Выберите шаблон, чтобы увидеть его сообщения по дням</div>
-        </section>
-
-        <section class="card operator-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Срабатывание по операторам</div>
-              <div class="card-caption">
-                {{ selected ? selected.name || selected.template_id : 'шаблон не выбран' }}
-              </div>
-            </div>
-          </div>
-          <div v-if="!selectedTriggers.length" class="empty">
+          <div v-else-if="!selectedTriggers.length" class="empty">
             Нет разбивки: выберите шаблон или за период не было подпавших сообщений
           </div>
           <div v-else class="table-wrap fill">
