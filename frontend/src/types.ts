@@ -297,9 +297,11 @@ export interface MatchedMessage {
 export type ActionKind =
   | 'loss_template'
   | 'unworking_template'
-  | 'off_operator'
+  | 'profitable_candidate'
   | 'untriggered'
   | 'unmatched_templated'
+
+export type Action = 'delete' | 'add'
 
 export type ActionDrillDown = 'template' | 'unmatched_templated'
 
@@ -315,9 +317,11 @@ export interface ActionItem {
   detail: string
   recommendation: string
   monthly_loss: string
+  monthly_benefit: string
   messages: number
   segments: number
   drill_down: ActionDrillDown | null
+  action: Action | null
 }
 
 export interface ActionCenter {
@@ -327,10 +331,10 @@ export interface ActionCenter {
   is_partial_period: boolean
   monthly_factor: number
   total_monthly_loss: string
+  total_monthly_benefit: string
   loss_templates: number
-  off_operator_loss: string
+  profitable_candidates: number
   untriggered_loss: string
-  off_operator_messages: number
   untriggered_messages: number
   unmatched_templated_messages: number
   unmatched_templated_segments: number

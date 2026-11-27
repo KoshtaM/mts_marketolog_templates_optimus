@@ -280,9 +280,11 @@ def action_item_to_dict(item: ActionItemView) -> dict[str, Any]:
         "detail": item.detail,
         "recommendation": item.recommendation,
         "monthly_loss": money(item.monthly_loss),
+        "monthly_benefit": money(item.monthly_benefit),
         "messages": item.messages,
         "segments": item.segments,
         "drill_down": item.drill_down,
+        "action": item.action,
     }
 
 
@@ -326,10 +328,10 @@ def action_center_to_dict(view: ActionCenterView) -> dict[str, Any]:
         "is_partial_period": view.is_partial_period,
         "monthly_factor": view.monthly_factor,
         "total_monthly_loss": money(view.total_monthly_loss),
+        "total_monthly_benefit": money(view.total_monthly_benefit),
         "loss_templates": view.loss_templates,
-        "off_operator_loss": money(view.off_operator_loss),
+        "profitable_candidates": view.profitable_candidates,
         "untriggered_loss": money(view.untriggered_loss),
-        "off_operator_messages": view.off_operator_messages,
         "untriggered_messages": view.untriggered_messages,
         "unmatched_templated_messages": view.unmatched_templated_messages,
         "unmatched_templated_segments": view.unmatched_templated_segments,

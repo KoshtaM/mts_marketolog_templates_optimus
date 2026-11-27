@@ -12,12 +12,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
 
 from mts_templates.domain.analytics.activity import OperatorTrigger, TemplateMetrics
-from mts_templates.domain.analytics.analysis import AnalysisRun, monthly_factor, monthly_net_benefit
+from mts_templates.domain.analytics.analysis import (
+    AnalysisRun,
+    CandidateGroup,
+    monthly_factor,
+    monthly_net_benefit,
+)
 from mts_templates.domain.entities import SmsTemplate
 from mts_templates.domain.value_objects import Money, Period
 
@@ -26,14 +31,24 @@ MEDIUM_LOSS = Money.from_rub("3000")
 # Убыток попадает в центр действий, только если он больше четверти стоимости
 # шаблона: мелкие колебания выгоды не стоят отдельного пункта рабочего списка.
 LOSS_FEE_SHARE = Decimal("0.25")
+# Рекомендация «Удалить»/«Добавить» выдаётся, только когда эффект превышает
+# три четверти ежемесячной стоимости шаблона.
+ACTION_FEE_SHARE = Decimal("0.75")
+
+
+class Action(StrEnum):
+    """Рекомендуемое действие: удалить шаблон или добавить кандидат."""
+
+    DELETE = "delete"
+    ADD = "add"
 
 
 class ActionKind(StrEnum):
-    """Тип проблемы в центре действий."""
+    """Тип пункта в центре действий."""
 
     LOSS_TEMPLATE = "loss_template"
     UNWORKING_TEMPLATE = "unworking_template"
-    OFF_OPERATOR = "off_operator"
+    PROFITABLE_CANDIDATE = "profitable_candidate"
     UNTRIGGERED = "untriggered"
     UNMATCHED_TEMPLATED = "unmatched_templated"
 
@@ -47,7 +62,7 @@ class DrillDown(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ActionItem:
-    """Одна проблема с денежной оценкой и рекомендацией."""
+    """Пункт списка: проблема или возможность с денежной оценкой и действием."""
 
     key: str
     kind: ActionKind
@@ -63,6 +78,8 @@ class ActionItem:
     template_name: str = ""
     operator: str | None = None
     drill_down: DrillDown | None = None
+    action: Action | None = None
+    monthly_benefit: Money = field(default_factory=Money.zero)
 
     def __post_init__(self) -> None:
         if not self.key:
@@ -75,7 +92,7 @@ class ActionItem:
 
 @dataclass(frozen=True, slots=True)
 class ActionCenter:
-    """Готовый рабочий список проблем за период загрузки."""
+    """Готовый рабочий список проблем и возможностей за период загрузки."""
 
     period: Period
     monthly_factor: Decimal
@@ -87,22 +104,19 @@ class ActionCenter:
     unmatched_templated_cost: Money
     warnings: tuple[str, ...] = ()
     loss_templates: int = 0
+    profitable_candidates: int = 0
 
     @property
     def total_monthly_loss(self) -> Money:
         return sum((item.monthly_loss for item in self.items), Money.zero())
 
     @property
-    def off_operator_loss(self) -> Money:
-        return _kind_total(self.items, ActionKind.OFF_OPERATOR)
+    def total_monthly_benefit(self) -> Money:
+        return sum((item.monthly_benefit for item in self.items), Money.zero())
 
     @property
     def untriggered_loss(self) -> Money:
         return _kind_total(self.items, ActionKind.UNTRIGGERED)
-
-    @property
-    def off_operator_messages(self) -> int:
-        return _kind_messages(self.items, ActionKind.OFF_OPERATOR)
 
     @property
     def untriggered_messages(self) -> int:
@@ -130,6 +144,7 @@ def build_action_center(
     items.extend(_template_items(run.metrics, by_id, factor))
     operator_items = _operator_items(run.operator_triggers, by_id, run, factor)
     items.extend(operator_items)
+    items.extend(_candidate_items(run.candidates))
     unmatched = _unmatched_templated_item(run, factor)
     if unmatched is not None:
         items.append(unmatched)
@@ -140,7 +155,7 @@ def build_action_center(
             "срабатывания не рассчитана. Показаны только объёмы сообщений."
         )
 
-    items.sort(key=lambda item: (-item.monthly_loss.amount, item.kind.value, item.key))
+    items.sort(key=lambda item: (-_item_impact(item).amount, item.kind.value, item.key))
     return ActionCenter(
         period=run.period,
         monthly_factor=factor,
@@ -155,6 +170,9 @@ def build_action_center(
             1
             for item in items
             if item.kind in (ActionKind.LOSS_TEMPLATE, ActionKind.UNWORKING_TEMPLATE)
+        ),
+        profitable_candidates=sum(
+            1 for item in items if item.kind is ActionKind.PROFITABLE_CANDIDATE
         ),
     )
 
@@ -180,6 +198,7 @@ def _template_items(
             f"стоимости шаблона {_money_text(item.template_fee)}/мес и срабатывании "
             f"{_percent(item.trigger_rate)}."
         )
+        delete = loss.amount > item.template_fee.amount * ACTION_FEE_SHARE
         items.append(
             ActionItem(
                 key=f"loss:{item.template_id}",
@@ -191,13 +210,17 @@ def _template_items(
                 template_name=name,
                 detail=detail,
                 recommendation=(
-                    "Отключить шаблон или пересмотреть его необходимость: "
+                    "Удалить шаблон: ежемесячная плата почти не окупается экономией на сегментах."
+                    if delete
+                    else "Отключить шаблон или пересмотреть его необходимость: "
                     "ежемесячная плата выше экономии на сегментах."
                 ),
                 monthly_loss=loss,
                 messages=item.matched_messages,
                 segments=item.matched_segments,
                 drill_down=DrillDown.TEMPLATE,
+                action=Action.DELETE if delete else None,
+                monthly_benefit=loss if delete else Money.zero(),
             )
         )
     return items
@@ -231,13 +254,15 @@ def _unworking_item(
         template_name=name,
         detail=detail,
         recommendation=(
-            "Отключить шаблон или проверить регистрацию, отправителя и текст: "
-            "пока нет срабатываний, ежемесячная плата не окупается."
+            "Удалить шаблон: пока нет срабатываний, ежемесячная плата расходуется "
+            "впустую. Перед удалением можно проверить регистрацию, отправителя и текст."
         ),
         monthly_loss=loss,
         messages=metrics.matched_messages,
         segments=metrics.matched_segments,
         drill_down=DrillDown.TEMPLATE,
+        action=Action.DELETE,
+        monthly_benefit=loss,
     )
 
 
@@ -249,6 +274,10 @@ def _operator_items(
 ) -> list[ActionItem]:
     items: list[ActionItem] = []
     for trigger in triggers:
+        if not trigger.listed:
+            # Операторы вне списка шаблона пока не попадают в центр действий:
+            # там нужны дополнительные проверки региона и тарификации.
+            continue
         if trigger.untriggered_segments <= 0 and trigger.untriggered_messages <= 0:
             continue
         loss = _loss_estimate(
@@ -260,46 +289,63 @@ def _operator_items(
         template = by_id.get(trigger.template_id)
         subject = template.text if template is not None else trigger.template_id
         name = template.name if template is not None else trigger.template_id
-        kind = ActionKind.OFF_OPERATOR if not trigger.listed else ActionKind.UNTRIGGERED
-        if kind is ActionKind.OFF_OPERATOR:
-            title = "Оператор вне списка шаблона"
-            detail = (
-                f"{trigger.untriggered_messages} сообщений подпали под шаблон, но "
-                f"оператор {trigger.operator.value} не входит в список операторов "
-                "регистрации. Сообщения оплачены как обычные SMS."
-            )
-            recommendation = (
-                "Добавить оператора в регистрацию шаблона: срабатывание вырастет, "
-                "а сегмент будет стоить по тарифу шаблонированных SMS."
-            )
-        else:
-            title = "Срабатывание ниже 100 %"
-            detail = (
-                f"{trigger.untriggered_messages} сообщений подпали под шаблон и оплачены "
-                f"как обычные, хотя оператор {trigger.operator.value} указан в шаблоне. "
-                "Причина — в регистрации шаблона или определении оператора получателя."
-            )
-            recommendation = (
-                "Проверить регистрацию шаблона у оператора и корректность определения "
-                "оператора получателя в выгрузке."
-            )
         items.append(
             ActionItem(
-                key=f"{'off' if kind is ActionKind.OFF_OPERATOR else 'untrig'}:"
-                f"{trigger.template_id}:{trigger.operator.value}",
-                kind=kind,
+                key=f"untrig:{trigger.template_id}:{trigger.operator.value}",
+                kind=ActionKind.UNTRIGGERED,
                 severity=_severity(loss),
-                title=title,
+                title="Срабатывание ниже 100 %",
                 subject=subject,
                 template_id=trigger.template_id,
                 template_name=name,
                 operator=trigger.operator.value,
-                detail=detail,
-                recommendation=recommendation,
+                detail=(
+                    f"{trigger.untriggered_messages} сообщений подпали под шаблон и оплачены "
+                    f"как обычные, хотя оператор {trigger.operator.value} указан в шаблоне. "
+                    "Причина — в регистрации шаблона или определении оператора получателя."
+                ),
+                recommendation=(
+                    "Проверить регистрацию шаблона у оператора и корректность определения "
+                    "оператора получателя в выгрузке."
+                ),
                 monthly_loss=loss,
                 messages=trigger.untriggered_messages,
                 segments=trigger.untriggered_segments,
                 drill_down=DrillDown.TEMPLATE,
+            )
+        )
+    return items
+
+
+def _candidate_items(candidates: Sequence[CandidateGroup]) -> list[ActionItem]:
+    """Выгодные кандидаты: возможность добавить новый шаблон."""
+    items: list[ActionItem] = []
+    for candidate in candidates:
+        if candidate.net_monthly.amount <= candidate.template_fee.amount * ACTION_FEE_SHARE:
+            continue
+        detail = (
+            f"Экономия {_money_text(candidate.monthly_saving)}/мес за вычетом платы "
+            f"{_money_text(candidate.template_fee)}/мес даёт "
+            f"{_money_text(candidate.net_monthly)}/мес. Сообщений — {candidate.messages}, "
+            f"сегментов — {candidate.segments}, уверенность — {_percent(candidate.confidence)}."
+        )
+        items.append(
+            ActionItem(
+                key=f"candidate:{candidate.candidate_id}",
+                kind=ActionKind.PROFITABLE_CANDIDATE,
+                severity=_severity(candidate.net_monthly),
+                title="Выгодный кандидат",
+                subject=candidate.template_text,
+                detail=detail,
+                recommendation=(
+                    "Проверить текст кандидата и зарегистрировать новый шаблон: "
+                    "месячная выгода превышает стоимость шаблона более чем на 75 %."
+                ),
+                monthly_loss=Money.zero(),
+                monthly_benefit=candidate.net_monthly,
+                messages=candidate.messages,
+                segments=candidate.segments,
+                action=Action.ADD,
             )
         )
     return items
@@ -342,6 +388,11 @@ def _exceeds_fee_share(loss: Money, fee: Money) -> bool:
     return loss.amount > fee.amount * LOSS_FEE_SHARE
 
 
+def _item_impact(item: ActionItem) -> Money:
+    """Денежный эффект пункта для сортировки: потеря или выгода действия."""
+    return max(item.monthly_benefit, item.monthly_loss, key=lambda value: value.amount)
+
+
 def _loss_estimate(
     actual_cost: Money,
     segments: int,
@@ -365,9 +416,7 @@ def _loss_estimate(
 
 def _has_unpriced_losses(items: Sequence[ActionItem]) -> bool:
     return any(
-        item.kind in (ActionKind.OFF_OPERATOR, ActionKind.UNTRIGGERED)
-        and item.segments > 0
-        and item.monthly_loss.amount == 0
+        item.kind is ActionKind.UNTRIGGERED and item.segments > 0 and item.monthly_loss.amount == 0
         for item in items
     )
 

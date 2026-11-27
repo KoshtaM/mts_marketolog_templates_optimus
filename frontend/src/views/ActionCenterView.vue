@@ -5,7 +5,7 @@ import KpiCard from '../components/KpiCard.vue'
 import MatchedMessagesDialog from '../components/MatchedMessagesDialog.vue'
 import { batchName, batchPeriod, integer, money, moneyValue, period } from '../format'
 import { isBusy, loadActionCenter, selectBatch, state } from '../store'
-import type { ActionItem, ActionKind } from '../types'
+import type { Action, ActionItem, ActionKind } from '../types'
 
 type KindFilter = 'all' | ActionKind
 
@@ -28,16 +28,21 @@ const items = computed(() => center.value?.items ?? [])
 const kindLabels: Record<ActionKind, string> = {
   loss_template: 'Убыточный шаблон',
   unworking_template: 'Неработающий',
-  off_operator: 'Оператор вне списка',
+  profitable_candidate: 'Выгодный кандидат',
   untriggered: 'Срабатывание ниже 100 %',
   unmatched_templated: 'Шаблонировано без шаблона',
+}
+
+const actionLabels: Record<Action, string> = {
+  delete: 'Удалить',
+  add: 'Добавить',
 }
 
 const counts = computed<Record<ActionKind, number>>(() => {
   const result: Record<ActionKind, number> = {
     loss_template: 0,
     unworking_template: 0,
-    off_operator: 0,
+    profitable_candidate: 0,
     untriggered: 0,
     unmatched_templated: 0,
   }
@@ -51,13 +56,13 @@ const filters = computed(() =>
       'all',
       'loss_template',
       'unworking_template',
-      'off_operator',
+      'profitable_candidate',
       'untriggered',
       'unmatched_templated',
     ] as KindFilter[]
   ).map((kind) => ({
     kind,
-    label: kind === 'all' ? 'Все проблемы' : kindLabels[kind],
+    label: kind === 'all' ? 'Все' : kindLabels[kind],
     count: kind === 'all' ? items.value.length : counts.value[kind],
   })),
 )
@@ -81,6 +86,16 @@ const lossTemplateTotal = computed(() =>
 
 const hasBatch = computed(() => Boolean(state.batchId))
 const totalLoss = computed(() => moneyValue(center.value?.total_monthly_loss ?? 0))
+const totalBenefit = computed(() => moneyValue(center.value?.total_monthly_benefit ?? 0))
+
+function lossText(item: ActionItem): string {
+  if (item.kind === 'unmatched_templated' || moneyValue(item.monthly_loss) === 0) return '—'
+  return money(item.monthly_loss, 0)
+}
+
+function benefitText(item: ActionItem): string {
+  return moneyValue(item.monthly_benefit) > 0 ? money(item.monthly_benefit, 0) : '—'
+}
 
 const methodology = computed(() => {
   if (!center.value) return ''
@@ -97,7 +112,7 @@ const methodology = computed(() => {
   } else {
     parts.push('период полный, суммы не масштабируются')
   }
-  return `Методика: потери — фактическая стоимость минус оценка по шаблонированной ставке; ${parts.join('; ')}.`
+  return `Методика: потери — фактическая стоимость минус оценка по шаблонированной ставке; выгода — месячная выгода кандидатов после вычета стоимости шаблона; ${parts.join('; ')}.`
 })
 
 function severityLabel(item: ActionItem): string {
@@ -130,7 +145,7 @@ function showMessages(item: ActionItem): void {
     heading: item.template_name || item.subject || item.title,
     text: item.subject,
     operator: item.operator,
-    untriggeredOnly: item.kind === 'off_operator' || item.kind === 'untriggered',
+    untriggeredOnly: item.kind === 'untriggered',
   }
 }
 
@@ -163,10 +178,10 @@ watch(
         <h1 class="page-title">Центр действий</h1>
         <div class="page-subtitle">
           <template v-if="center">
-            Где теряются деньги и что сделать первым ·
+            Где теряются деньги, что сделать первым и какие возможности есть ·
             {{ period(center.period_from, center.period_to) }}
           </template>
-          <template v-else>Рабочий список проблем по выбранной загрузке</template>
+          <template v-else>Рабочий список проблем и возможностей по выбранной загрузке</template>
         </div>
       </div>
       <div class="toolbar">
@@ -202,10 +217,10 @@ watch(
           hint="оценка по шаблонированной ставке"
         />
         <KpiCard
-          label="Оператор вне списка"
-          :value="money(center.off_operator_loss, 0)"
-          :tone="moneyValue(center.off_operator_loss) > 0 ? 'negative' : 'default'"
-          :hint="`${integer(center.off_operator_messages)} сообщений`"
+          label="Выгода действий"
+          :value="money(center.total_monthly_benefit, 0)"
+          :tone="totalBenefit > 0 ? 'positive' : 'default'"
+          :hint="`${integer(center.profitable_candidates)} кандидатов на добавление`"
         />
         <KpiCard
           label="Срабатывание ниже 100 %"
@@ -252,9 +267,9 @@ watch(
       <section class="card table-card">
         <div class="card-header action-table-header">
           <div>
-            <div class="card-title">Проблемы по приоритету</div>
+            <div class="card-title">Проблемы и возможности по приоритету</div>
             <div class="card-caption">
-              {{ integer(filtered.length) }} из {{ integer(items.length) }} · сортировка по потерям
+              {{ integer(filtered.length) }} из {{ integer(items.length) }} · сортировка по эффекту
             </div>
           </div>
           <input
@@ -281,19 +296,21 @@ watch(
         </div>
 
         <div v-if="!filtered.length" class="empty">
-          По этому фильтру проблем нет — значит, по выбранной загрузке всё в порядке.
+          По этому фильтру пунктов нет — значит, по выбранной загрузке всё в порядке.
         </div>
         <div v-else class="table-wrap">
           <table class="data">
             <thead>
               <tr>
                 <th>Приоритет</th>
-                <th>Проблема</th>
+                <th>Проблема / возможность</th>
+                <th>Действие</th>
                 <th>Шаблон / объект</th>
                 <th>Оператор</th>
                 <th class="num">Сообщений</th>
                 <th class="num">Сегментов</th>
                 <th class="num">Потери/мес</th>
+                <th class="num">Выгода/мес</th>
                 <th></th>
               </tr>
             </thead>
@@ -311,6 +328,12 @@ watch(
                   </div>
                 </td>
                 <td>
+                  <span v-if="item.action" class="action-badge" :class="`act-${item.action}`">
+                    {{ actionLabels[item.action] }}
+                  </span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td>
                   <div class="cell-clamp" :title="item.subject">{{ item.subject }}</div>
                 </td>
                 <td>{{ item.operator || '—' }}</td>
@@ -318,17 +341,28 @@ watch(
                 <td class="num">{{ integer(item.segments) }}</td>
                 <td
                   class="num"
-                  :class="{ negative: moneyValue(item.monthly_loss) > 0 }"
+                  :class="{
+                    negative: moneyValue(item.monthly_loss) > 0,
+                    muted: item.kind === 'unmatched_templated',
+                  }"
                   :title="item.detail"
                 >
-                  {{
-                    item.kind === 'unmatched_templated'
-                      ? 'инфо'
-                      : money(item.monthly_loss, 0)
-                  }}
+                  {{ item.kind === 'unmatched_templated' ? 'инфо' : lossText(item) }}
+                </td>
+                <td
+                  class="num"
+                  :class="{ positive: moneyValue(item.monthly_benefit) > 0 }"
+                  :title="item.detail"
+                >
+                  {{ benefitText(item) }}
                 </td>
                 <td>
-                  <button class="btn btn-ghost action-link" type="button" @click="showMessages(item)">
+                  <button
+                    v-if="item.drill_down"
+                    class="btn btn-ghost action-link"
+                    type="button"
+                    @click="showMessages(item)"
+                  >
                     Сообщения
                   </button>
                 </td>
@@ -447,6 +481,28 @@ watch(
 
 .badge.sev-0 {
   color: var(--text-muted);
+}
+
+.action-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: var(--border-width) solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.action-badge.act-delete {
+  color: var(--negative);
+  border-color: color-mix(in srgb, var(--negative) 30%, var(--border));
+  background: color-mix(in srgb, var(--negative) 10%, var(--surface));
+}
+
+.action-badge.act-add {
+  color: var(--positive);
+  border-color: color-mix(in srgb, var(--positive) 30%, var(--border));
+  background: color-mix(in srgb, var(--positive) 10%, var(--surface));
 }
 
 @media (max-width: 1100px) {

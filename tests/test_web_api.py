@@ -287,27 +287,28 @@ def test_action_center_and_drill_down(client: TestClient, tmp_path: Path) -> Non
     center = response.json()
 
     assert center["loss_templates"] == 1
-    assert center["off_operator_messages"] == 1
-    assert center["off_operator_loss"] == "5.67"
+    assert center["profitable_candidates"] == 0
     assert center["unmatched_templated_messages"] == 1
     assert center["unmatched_templated_segments"] == 1
     assert center["unmatched_templated_cost"] == "5.00"
-    assert center["total_monthly_loss"] == "1994.37"
+    assert center["total_monthly_loss"] == "1988.70"
+    assert center["total_monthly_benefit"] == "1988.70"
     assert center["observed_templated_rate"] == "4.33"
     assert [item["kind"] for item in center["items"]] == [
         "loss_template",
-        "off_operator",
         "unmatched_templated",
     ]
 
-    loss_item, operator_item, unmatched_item = center["items"]
+    loss_item, unmatched_item = center["items"]
     assert loss_item["severity"] == 1
     assert loss_item["monthly_loss"] == "1988.70"
+    assert loss_item["monthly_benefit"] == "1988.70"
+    assert loss_item["action"] == "delete"
     assert loss_item["drill_down"] == "template"
-    assert operator_item["operator"] == "Beeline"
-    assert operator_item["monthly_loss"] == "5.67"
     assert unmatched_item["severity"] == 0
     assert unmatched_item["monthly_loss"] == "0.00"
+    assert unmatched_item["monthly_benefit"] == "0.00"
+    assert unmatched_item["action"] is None
     assert unmatched_item["drill_down"] == "unmatched_templated"
 
     template_messages = client.get(

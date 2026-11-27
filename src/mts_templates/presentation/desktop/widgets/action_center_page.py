@@ -50,19 +50,42 @@ TABLE_STRETCH = 4
 LOWER_STRETCH = 3
 SPLIT_WEIGHT_SCALE = 1000
 
+
+def _severity_title(severity: int) -> str:
+    if severity >= 3:
+        return "Критично"
+    if severity == 2:
+        return "Высокий"
+    if severity == 1:
+        return "Средний"
+    return "Инфо"
+
+
+def _action_title(action: str) -> str:
+    """Русская подпись рекомендуемого действия."""
+    return {"delete": "Удалить", "add": "Добавить"}.get(action, "—")
+
+
 COLUMNS = (
     Column(
         "Приоритет",
         lambda item: item.severity,
-        formatter=lambda value: str(int(value or 0)),
-        width=90,
+        formatter=lambda value: _severity_title(int(value or 0)),
+        width=110,
         tooltip=lambda item: _severity_title(item.severity),
     ),
     Column(
-        "Проблема",
+        "Проблема / возможность",
         lambda item: item.title,
         width=300,
         tooltip=lambda item: f"{item.title}. {item.detail}",
+    ),
+    Column(
+        "Действие",
+        lambda item: item.action or "",
+        formatter=_action_title,
+        width=90,
+        tooltip=lambda item: item.recommendation,
     ),
     Column(
         "Шаблон / объект",
@@ -80,17 +103,14 @@ COLUMNS = (
         width=110,
         tooltip=lambda item: f"за период: {format_money(item.monthly_loss)}",
     ),
+    Column(
+        "Выгода/мес",
+        lambda item: item.monthly_benefit,
+        formatter=format_money,
+        width=110,
+        tooltip=lambda item: f"месячная выгода действия: {format_money(item.monthly_benefit)}",
+    ),
 )
-
-
-def _severity_title(severity: int) -> str:
-    if severity >= 3:
-        return "Критично"
-    if severity == 2:
-        return "Высокий"
-    if severity == 1:
-        return "Средний"
-    return "Инфо"
 
 
 def _theme_row_palette() -> RowPalette:
@@ -100,7 +120,7 @@ def _theme_row_palette() -> RowPalette:
 
 
 class ActionCenterPage(QWidget):
-    """Рабочий список проблем: суммы потерь в месяц и переход к сообщениям."""
+    """Рабочий список проблем и возможностей с рекомендациями действий."""
 
     def __init__(
         self,
@@ -130,7 +150,7 @@ class ActionCenterPage(QWidget):
         self._warnings.setReadOnly(True)
         self._warnings.setMaximumHeight(180)
         self._total_loss = BenefitTotal("Потери в месяц", self, inline=True)
-        self._off_loss = BenefitTotal("Убыток от операторов вне списка, ₽/мес", self, inline=True)
+        self._total_benefit = BenefitTotal("Выгода действий, ₽/мес", self, inline=True)
         self._untriggered_loss = BenefitTotal(
             "Срабатывание ниже 100 %, ₽/мес",
             self,
@@ -138,8 +158,8 @@ class ActionCenterPage(QWidget):
         )
         self._unmatched_label = QLabel("", self)
         self._model = RowsTableModel(COLUMNS, self, row_color=self._row_color)
-        self._table, self._proxy = build_table(self._model, self, stretch_column=0)
-        sort_by_title(self._table, "Потери/мес", Qt.SortOrder.DescendingOrder)
+        self._table, self._proxy = build_table(self._model, self, stretch_column=3)
+        sort_by_title(self._table, "Приоритет", Qt.SortOrder.DescendingOrder)
         self._busy = BusyOverlay(self._table)
 
         self._build()
@@ -155,12 +175,12 @@ class ActionCenterPage(QWidget):
         top.addWidget(self._recalc_button)
         layout.addLayout(top)
 
-        self._filter.setPlaceholderText("Фильтр по проблеме, шаблону, оператору")
+        self._filter.setPlaceholderText("Фильтр по проблеме, действию, шаблону, оператору")
         layout.addWidget(self._filter)
 
         losses_row = QHBoxLayout()
         losses_row.addWidget(self._total_loss, stretch=1)
-        losses_row.addWidget(self._off_loss, stretch=1)
+        losses_row.addWidget(self._total_benefit, stretch=1)
         losses_row.addWidget(self._untriggered_loss, stretch=1)
         layout.addLayout(losses_row)
         layout.addWidget(self._unmatched_label)
@@ -256,13 +276,15 @@ class ActionCenterPage(QWidget):
         self._apply_filter(self._filter.text())
         fit_columns(
             self._table,
-            max_widths={0: 90, 1: 300, 2: 360, 3: 120, 4: 90, 5: 90, 6: 110},
+            max_widths={1: 300, 2: 90, 3: 360, 4: 120, 5: 90, 6: 90, 7: 110, 8: 110},
         )
         self._apply_totals(center)
         summary = (
             f"Период {format_period(center.period_from, center.period_to)} · "
             f"потери в месяц {format_money(center.total_monthly_loss)} · "
+            f"выгода действий {format_money(center.total_monthly_benefit)} · "
             f"шаблонов с убытком {format_int(center.loss_templates)} · "
+            f"кандидатов на добавление {format_int(center.profitable_candidates)} · "
             f"несопоставленных шаблонированных {format_int(center.unmatched_templated_messages)}"
         )
         if center.is_partial_period:
@@ -278,9 +300,10 @@ class ActionCenterPage(QWidget):
         loss_color = semantic_text(active_palette().negative, active_palette().window)
         neutral = neutral_color()
         self._total_loss.set_value(format_money(center.total_monthly_loss), loss_color)
-        self._off_loss.set_value(
-            format_money(center.off_operator_loss),
-            loss_color if center.off_operator_loss.amount > 0 else neutral,
+        benefit_color = semantic_text(active_palette().positive, active_palette().window)
+        self._total_benefit.set_value(
+            format_money(center.total_monthly_benefit),
+            benefit_color if center.total_monthly_benefit.amount > 0 else neutral,
         )
         self._untriggered_loss.set_value(
             format_money(center.untriggered_loss),
@@ -313,14 +336,14 @@ class ActionCenterPage(QWidget):
 
     def _cell_clicked(self, index: QModelIndex) -> None:
         source = self._proxy.mapToSource(index)
-        if not source.isValid() or source.column() != 0:
+        if not source.isValid() or source.column() != 1:
             return
         self._open_drill_down(source.row())
 
     def _open_drill_down(self, row: int) -> None:
         item: ActionItemView = self._model.row_at(row)
         batch_id = self._batch_id
-        if not batch_id:
+        if not batch_id or item.drill_down is None:
             return
         self._set_busy(True, "Загрузка сообщений…")
         if item.kind == "unmatched_templated" or item.drill_down == "unmatched_templated":
@@ -341,7 +364,7 @@ class ActionCenterPage(QWidget):
                 batch_id,
                 template_id,
                 operator=item.operator,
-                untriggered_only=item.kind in ("off_operator", "untriggered"),
+                untriggered_only=item.kind == "untriggered",
                 should_cancel=lambda: token.cancelled,
             ),
             on_success=lambda rows: self._open_messages_dialog(rows, item, unmatched=False),
@@ -390,5 +413,5 @@ class ActionCenterPage(QWidget):
 
     def _reset_totals(self) -> None:
         self._total_loss.reset()
-        self._off_loss.reset()
+        self._total_benefit.reset()
         self._untriggered_loss.reset()

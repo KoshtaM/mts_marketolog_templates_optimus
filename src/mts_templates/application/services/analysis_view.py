@@ -183,9 +183,11 @@ def to_action_center_view(
             detail=item.detail,
             recommendation=item.recommendation,
             monthly_loss=item.monthly_loss,
+            monthly_benefit=item.monthly_benefit,
             messages=item.messages,
             segments=item.segments,
             drill_down=item.drill_down.value if item.drill_down is not None else None,
+            action=item.action.value if item.action is not None else None,
         )
         for item in center.items
     )
@@ -196,10 +198,10 @@ def to_action_center_view(
         is_partial_period=center.period.days < PARTIAL_PERIOD_DAYS,
         monthly_factor=float(center.monthly_factor),
         total_monthly_loss=center.total_monthly_loss,
+        total_monthly_benefit=center.total_monthly_benefit,
         loss_templates=center.loss_templates,
-        off_operator_loss=center.off_operator_loss,
+        profitable_candidates=center.profitable_candidates,
         untriggered_loss=center.untriggered_loss,
-        off_operator_messages=center.off_operator_messages,
         untriggered_messages=center.untriggered_messages,
         unmatched_templated_messages=center.unmatched_templated_messages,
         unmatched_templated_segments=center.unmatched_templated_segments,

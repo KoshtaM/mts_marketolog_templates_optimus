@@ -1,18 +1,19 @@
-"""Тесты центра действий: приоритеты, суммы потерь и переходы к сообщениям."""
+"""Тесты центра действий: приоритеты, действия, суммы и переходы к сообщениям."""
 
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from mts_templates.domain.analytics.actions import (
+    Action,
     ActionKind,
     DrillDown,
     build_action_center,
 )
-from mts_templates.domain.analytics.activity import OperatorTrigger, TemplateMetrics
-from mts_templates.domain.analytics.analysis import AnalysisRun
+from mts_templates.domain.analytics.activity import DaySegments, OperatorTrigger, TemplateMetrics
+from mts_templates.domain.analytics.analysis import AnalysisRun, CandidateGroup
 from mts_templates.domain.entities import SmsTemplate
 from mts_templates.domain.value_objects import Money, Operator, Period
 
@@ -74,6 +75,7 @@ def _run(
     *,
     days: int = 30,
     metrics: tuple[TemplateMetrics, ...] = (),
+    candidates: tuple[CandidateGroup, ...] = (),
     triggers: tuple[OperatorTrigger, ...] = (),
     templated_rate: Money | None = None,
     unmatched_messages: int = 0,
@@ -89,12 +91,37 @@ def _run(
         message_count=100,
         matched_message_count=100,
         metrics=metrics,
-        candidates=(),
+        candidates=candidates,
         operator_triggers=triggers,
         observed_templated_rate=templated_rate,
         unmatched_templated_messages=unmatched_messages,
         unmatched_templated_segments=unmatched_segments,
         unmatched_templated_cost=unmatched_cost or Money.zero(),
+    )
+
+
+def _candidate(net_monthly: str) -> CandidateGroup:
+    """Кандидат с платой за шаблон 2 000 ₽ и заданной месячной выгодой."""
+    net = Money.from_rub(net_monthly)
+    fee = Money.from_rub("2000")
+    return CandidateGroup(
+        candidate_id="c1",
+        template_text="Заказ %d готов",
+        messages=50,
+        segments=80,
+        actual_cost=Money.from_rub("800"),
+        templated_cost=Money.from_rub("400"),
+        monthly_saving=net + fee,
+        template_fee=fee,
+        net_monthly=net,
+        payback_months=None,
+        confidence=Decimal("0.9"),
+        coverage=Decimal("0.8"),
+        senders=("SHOP",),
+        operators=(Operator.MTS,),
+        period=_period(),
+        is_partial_period=False,
+        daily_segments=(DaySegments(day=date(2026, 11, 1), segments=80),),
     )
 
 
@@ -183,7 +210,7 @@ def test_loss_above_quarter_of_fee_is_included() -> None:
     assert center.loss_templates == 1
 
 
-def test_off_operator_loss_uses_observed_templated_rate() -> None:
+def test_off_operator_is_not_included_in_action_center() -> None:
     trigger = OperatorTrigger(
         template_id="t1",
         operator=Operator.BEELINE,
@@ -197,40 +224,16 @@ def test_off_operator_loss_uses_observed_templated_rate() -> None:
     )
 
     center = build_action_center(
-        _run(triggers=(trigger,), templated_rate=Money.from_rub("5")),
+        _run(
+            days=15,
+            triggers=(trigger,),
+            templated_rate=Money.from_rub("5"),
+        ),
         (_template(),),
     )
 
-    item = center.items[0]
-    assert item.kind is ActionKind.OFF_OPERATOR
-    assert item.operator == Operator.BEELINE.value
-    assert item.messages == 10
-    assert item.segments == 20
-    assert item.monthly_loss.rounded().amount == Decimal("100.00")
-    assert item.drill_down is DrillDown.TEMPLATE
-    assert center.off_operator_loss.rounded().amount == Decimal("100.00")
-    assert center.off_operator_messages == 10
-
-
-def test_off_operator_loss_is_scaled_for_partial_period() -> None:
-    trigger = OperatorTrigger(
-        template_id="t1",
-        operator=Operator.BEELINE,
-        listed=False,
-        matched_messages=10,
-        triggered_messages=0,
-        matched_segments=20,
-        untriggered_messages=10,
-        untriggered_segments=20,
-        untriggered_cost=Money.from_rub("200"),
-    )
-
-    center = build_action_center(
-        _run(days=15, triggers=(trigger,), templated_rate=Money.from_rub("5")),
-        (_template(),),
-    )
-
-    assert center.items[0].monthly_loss.rounded().amount == Decimal("200.00")
+    assert center.items == ()
+    assert center.total_monthly_loss == Money.zero()
 
 
 def test_trigger_below_full_marks_listed_operator() -> None:
@@ -303,11 +306,11 @@ def test_missing_templated_rate_keeps_volumes_without_money() -> None:
     assert any("Нет наблюдаемой ставки" in warning for warning in center.warnings)
 
 
-def test_items_are_sorted_by_monthly_loss() -> None:
+def test_items_are_sorted_by_monthly_impact() -> None:
     trigger = OperatorTrigger(
         template_id="t1",
-        operator=Operator.BEELINE,
-        listed=False,
+        operator=Operator.MTS,
+        listed=True,
         matched_messages=10,
         triggered_messages=0,
         matched_segments=20,
@@ -327,6 +330,62 @@ def test_items_are_sorted_by_monthly_loss() -> None:
 
     assert [item.kind for item in center.items] == [
         ActionKind.LOSS_TEMPLATE,
-        ActionKind.OFF_OPERATOR,
+        ActionKind.UNTRIGGERED,
     ]
     assert center.total_monthly_loss.rounded().amount == Decimal("1500.00")
+
+
+def test_unworking_template_offers_delete() -> None:
+    center = build_action_center(_run(metrics=(_unworking_metrics(),)), (_template(),))
+
+    item = center.items[0]
+    assert item.action is Action.DELETE
+    assert item.monthly_benefit.rounded().amount == Decimal("2000.00")
+    assert center.total_monthly_benefit.rounded().amount == Decimal("2000.00")
+
+
+def test_loss_template_action_requires_three_quarters_of_fee() -> None:
+    below = replace(
+        _loss_metrics(),
+        baseline_cost=Money.from_rub("900"),
+        net_benefit=Money.from_rub("-1500"),
+    )
+    above = replace(
+        _loss_metrics(),
+        baseline_cost=Money.from_rub("800"),
+        net_benefit=Money.from_rub("-1600"),
+    )
+
+    below_center = build_action_center(_run(metrics=(below,)), (_template(),))
+    above_center = build_action_center(_run(metrics=(above,)), (_template(),))
+
+    assert below_center.items[0].action is None
+    assert below_center.items[0].monthly_benefit == Money.zero()
+    assert above_center.items[0].action is Action.DELETE
+    assert above_center.items[0].monthly_benefit.rounded().amount == Decimal("1600.00")
+
+
+def test_profitable_candidate_offers_add() -> None:
+    center = build_action_center(_run(candidates=(_candidate("1600"),)), ())
+
+    item = center.items[0]
+    assert item.kind is ActionKind.PROFITABLE_CANDIDATE
+    assert item.title == "Выгодный кандидат"
+    assert item.subject == "Заказ %d готов"
+    assert item.action is Action.ADD
+    assert item.drill_down is None
+    assert item.messages == 50
+    assert item.segments == 80
+    assert item.monthly_loss == Money.zero()
+    assert item.monthly_benefit.rounded().amount == Decimal("1600.00")
+    assert center.profitable_candidates == 1
+    assert center.total_monthly_benefit.rounded().amount == Decimal("1600.00")
+    assert center.total_monthly_loss == Money.zero()
+
+
+def test_candidate_at_three_quarters_of_fee_is_skipped() -> None:
+    center = build_action_center(_run(candidates=(_candidate("1500"),)), ())
+
+    assert center.items == ()
+    assert center.profitable_candidates == 0
+    assert center.total_monthly_benefit == Money.zero()

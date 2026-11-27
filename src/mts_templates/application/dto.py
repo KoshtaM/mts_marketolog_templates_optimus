@@ -383,7 +383,7 @@ class AnalysisView:
 
 @dataclass(frozen=True, slots=True)
 class ActionItemView:
-    """Пункт центра действий: проблема, сумма, объёмы и переход к сообщениям."""
+    """Пункт центра действий: проблема или возможность, сумма и действие."""
 
     key: str
     kind: str
@@ -396,14 +396,16 @@ class ActionItemView:
     detail: str
     recommendation: str
     monthly_loss: Money
+    monthly_benefit: Money
     messages: int
     segments: int
     drill_down: str | None
+    action: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ActionCenterView:
-    """Рабочий список проблем по выбранной загрузке."""
+    """Рабочий список проблем и возможностей по выбранной загрузке."""
 
     batch_id: str
     period_from: datetime
@@ -411,10 +413,10 @@ class ActionCenterView:
     is_partial_period: bool
     monthly_factor: float
     total_monthly_loss: Money
+    total_monthly_benefit: Money
     loss_templates: int
-    off_operator_loss: Money
+    profitable_candidates: int
     untriggered_loss: Money
-    off_operator_messages: int
     untriggered_messages: int
     unmatched_templated_messages: int
     unmatched_templated_segments: int
