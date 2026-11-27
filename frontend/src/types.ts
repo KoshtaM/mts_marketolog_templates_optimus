@@ -270,6 +270,7 @@ export interface MatchedMessage {
 
 export type ActionKind =
   | 'loss_template'
+  | 'unworking_template'
   | 'off_operator'
   | 'untriggered'
   | 'unmatched_templated'

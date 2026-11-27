@@ -23,12 +23,16 @@ from mts_templates.domain.value_objects import Money, Period
 
 HIGH_LOSS = Money.from_rub("10000")
 MEDIUM_LOSS = Money.from_rub("3000")
+# Убыток попадает в центр действий, только если он больше четверти стоимости
+# шаблона: мелкие колебания выгоды не стоят отдельного пункта рабочего списка.
+LOSS_FEE_SHARE = Decimal("0.25")
 
 
 class ActionKind(StrEnum):
     """Тип проблемы в центре действий."""
 
     LOSS_TEMPLATE = "loss_template"
+    UNWORKING_TEMPLATE = "unworking_template"
     OFF_OPERATOR = "off_operator"
     UNTRIGGERED = "untriggered"
     UNMATCHED_TEMPLATED = "unmatched_templated"
@@ -123,7 +127,7 @@ def build_action_center(
     warnings: list[str] = []
     items: list[ActionItem] = []
 
-    items.extend(_loss_template_items(run.metrics, by_id, factor))
+    items.extend(_template_items(run.metrics, by_id, factor))
     operator_items = _operator_items(run.operator_triggers, by_id, run, factor)
     items.extend(operator_items)
     unmatched = _unmatched_templated_item(run, factor)
@@ -148,24 +152,29 @@ def build_action_center(
         unmatched_templated_cost=run.unmatched_templated_cost,
         warnings=tuple(warnings),
         loss_templates=sum(
-            1 for metrics in run.metrics if _monthly_loss(metrics, factor).amount > 0
+            1
+            for item in items
+            if item.kind in (ActionKind.LOSS_TEMPLATE, ActionKind.UNWORKING_TEMPLATE)
         ),
     )
 
 
-def _loss_template_items(
+def _template_items(
     metrics: Sequence[TemplateMetrics],
     by_id: Mapping[str, SmsTemplate],
     factor: Decimal,
 ) -> list[ActionItem]:
     items: list[ActionItem] = []
     for item in metrics:
-        loss = _monthly_loss(item, factor)
-        if loss.amount <= 0:
-            continue
         template = by_id.get(item.template_id)
         subject = template.text if template is not None else item.template_id
         name = template.name if template is not None else item.template_id
+        if item.triggered_messages == 0:
+            items.append(_unworking_item(item, subject, name))
+            continue
+        loss = _monthly_loss(item, factor)
+        if not _exceeds_fee_share(loss, item.template_fee):
+            continue
         detail = (
             f"Выгода {_money_text(monthly_net_benefit(item, factor))}/мес при "
             f"стоимости шаблона {_money_text(item.template_fee)}/мес и срабатывании "
@@ -192,6 +201,44 @@ def _loss_template_items(
             )
         )
     return items
+
+
+def _unworking_item(
+    metrics: TemplateMetrics,
+    subject: str,
+    name: str,
+) -> ActionItem:
+    """Шаблон без единого срабатывания: плата расходуется впустую."""
+    if metrics.matched_messages > 0:
+        detail = (
+            f"{metrics.matched_messages} сообщений подпали под шаблон, но ни одно "
+            f"не оплачено как шаблонированное. Плата "
+            f"{_money_text(metrics.template_fee)}/мес расходуется впустую."
+        )
+    else:
+        detail = (
+            "Ни одно сообщение не подпало под шаблон. "
+            f"Плата {_money_text(metrics.template_fee)}/мес расходуется впустую."
+        )
+    loss = metrics.template_fee
+    return ActionItem(
+        key=f"unworking:{metrics.template_id}",
+        kind=ActionKind.UNWORKING_TEMPLATE,
+        severity=_severity(loss) if loss.amount > 0 else 0,
+        title="Неработающий",
+        subject=subject,
+        template_id=metrics.template_id,
+        template_name=name,
+        detail=detail,
+        recommendation=(
+            "Отключить шаблон или проверить регистрацию, отправителя и текст: "
+            "пока нет срабатываний, ежемесячная плата не окупается."
+        ),
+        monthly_loss=loss,
+        messages=metrics.matched_messages,
+        segments=metrics.matched_segments,
+        drill_down=DrillDown.TEMPLATE,
+    )
 
 
 def _operator_items(
@@ -288,6 +335,11 @@ def _monthly_loss(metrics: TemplateMetrics, factor: Decimal) -> Money:
     """Убыток шаблона в месяц как положительная величина экономии при отключении."""
     net = monthly_net_benefit(metrics, factor)
     return -net if net.amount < 0 else Money.zero()
+
+
+def _exceeds_fee_share(loss: Money, fee: Money) -> bool:
+    """Убыток значим, если больше четверти ежемесячной стоимости шаблона."""
+    return loss.amount > fee.amount * LOSS_FEE_SHARE
 
 
 def _loss_estimate(

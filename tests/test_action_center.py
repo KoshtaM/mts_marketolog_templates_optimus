@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -48,6 +49,24 @@ def _loss_metrics() -> TemplateMetrics:
         off_operator_messages=0,
         trigger_rate=Decimal("1"),
         active=True,
+    )
+
+
+def _unworking_metrics() -> TemplateMetrics:
+    return TemplateMetrics(
+        template_id="t1",
+        matched_messages=0,
+        matched_segments=0,
+        delivered_messages=0,
+        unique_recipients=0,
+        actual_cost=Money.zero(),
+        baseline_cost=Money.zero(),
+        template_fee=Money.from_rub("2000"),
+        net_benefit=Money.from_rub("-2000"),
+        triggered_messages=0,
+        off_operator_messages=0,
+        trigger_rate=Decimal("0"),
+        active=False,
     )
 
 
@@ -100,6 +119,68 @@ def test_partial_period_scales_monthly_loss() -> None:
     assert center.monthly_factor == Decimal(2)
     assert item.monthly_loss.rounded().amount == Decimal("800.00")
     assert center.total_monthly_loss.rounded().amount == Decimal("800.00")
+
+
+def test_unworking_template_is_marked_as_unworking() -> None:
+    center = build_action_center(_run(metrics=(_unworking_metrics(),)), (_template(),))
+
+    assert center.loss_templates == 1
+    item = center.items[0]
+    assert item.kind is ActionKind.UNWORKING_TEMPLATE
+    assert item.title == "Неработающий"
+    assert item.monthly_loss.rounded().amount == Decimal("2000.00")
+    assert item.messages == 0
+    assert item.severity == 1
+    assert item.template_id == "t1"
+    assert item.drill_down is DrillDown.TEMPLATE
+    assert center.total_monthly_loss.rounded().amount == Decimal("2000.00")
+
+
+def test_unworking_template_with_matched_messages_is_marked_as_unworking() -> None:
+    metrics = replace(
+        _unworking_metrics(),
+        matched_messages=100,
+        matched_segments=200,
+        off_operator_messages=100,
+        active=True,
+    )
+
+    center = build_action_center(_run(metrics=(metrics,)), (_template(),))
+
+    item = center.items[0]
+    assert item.kind is ActionKind.UNWORKING_TEMPLATE
+    assert item.title == "Неработающий"
+    assert item.messages == 100
+    assert item.segments == 200
+    assert item.monthly_loss.rounded().amount == Decimal("2000.00")
+
+
+def test_loss_at_quarter_of_fee_is_skipped() -> None:
+    metrics = replace(
+        _loss_metrics(),
+        baseline_cost=Money.from_rub("1900"),
+        net_benefit=Money.from_rub("-500"),
+    )
+
+    center = build_action_center(_run(metrics=(metrics,)), (_template(),))
+
+    assert center.items == ()
+    assert center.loss_templates == 0
+    assert center.total_monthly_loss == Money.zero()
+
+
+def test_loss_above_quarter_of_fee_is_included() -> None:
+    metrics = replace(
+        _loss_metrics(),
+        baseline_cost=Money.from_rub("1800"),
+        net_benefit=Money.from_rub("-600"),
+    )
+
+    center = build_action_center(_run(metrics=(metrics,)), (_template(),))
+
+    assert [item.kind for item in center.items] == [ActionKind.LOSS_TEMPLATE]
+    assert center.items[0].monthly_loss.rounded().amount == Decimal("600.00")
+    assert center.loss_templates == 1
 
 
 def test_off_operator_loss_uses_observed_templated_rate() -> None:

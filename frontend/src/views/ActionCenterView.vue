@@ -27,6 +27,7 @@ const items = computed(() => center.value?.items ?? [])
 
 const kindLabels: Record<ActionKind, string> = {
   loss_template: 'Убыточный шаблон',
+  unworking_template: 'Неработающий',
   off_operator: 'Оператор вне списка',
   untriggered: 'Срабатывание ниже 100 %',
   unmatched_templated: 'Шаблонировано без шаблона',
@@ -35,6 +36,7 @@ const kindLabels: Record<ActionKind, string> = {
 const counts = computed<Record<ActionKind, number>>(() => {
   const result: Record<ActionKind, number> = {
     loss_template: 0,
+    unworking_template: 0,
     off_operator: 0,
     untriggered: 0,
     unmatched_templated: 0,
@@ -44,13 +46,20 @@ const counts = computed<Record<ActionKind, number>>(() => {
 })
 
 const filters = computed(() =>
-  (['all', 'loss_template', 'off_operator', 'untriggered', 'unmatched_templated'] as KindFilter[]).map(
-    (kind) => ({
-      kind,
-      label: kind === 'all' ? 'Все проблемы' : kindLabels[kind],
-      count: kind === 'all' ? items.value.length : counts.value[kind],
-    }),
-  ),
+  (
+    [
+      'all',
+      'loss_template',
+      'unworking_template',
+      'off_operator',
+      'untriggered',
+      'unmatched_templated',
+    ] as KindFilter[]
+  ).map((kind) => ({
+    kind,
+    label: kind === 'all' ? 'Все проблемы' : kindLabels[kind],
+    count: kind === 'all' ? items.value.length : counts.value[kind],
+  })),
 )
 
 const filtered = computed(() => {
@@ -66,7 +75,7 @@ const filtered = computed(() => {
 
 const lossTemplateTotal = computed(() =>
   items.value
-    .filter((item) => item.kind === 'loss_template')
+    .filter((item) => item.kind === 'loss_template' || item.kind === 'unworking_template')
     .reduce((sum, item) => sum + moneyValue(item.monthly_loss), 0),
 )
 
